@@ -3,6 +3,22 @@ build/
 dist/
 coverage/
 .DS_Store
+.agent/
 *.log
 .env*
 !.env.example
+
+# Temporary and Scratch files
+scratch/
+*.docx
+*.xlsx
+*.sql
+*.pyc
+__pycache__/
+*.txt
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!crawledData.json
+!metadata.json
