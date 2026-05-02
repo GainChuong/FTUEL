@@ -30,6 +30,7 @@ import Chatbot from "./components/Chatbot";
 import { AuthProvider, useAuth } from "./lib/auth";
 import LoginPage from "./components/LoginPage";
 import { supabase } from "./lib/supabase";
+import { getGeminiXAIExplanation, getGeminiStrategyExplanation } from './lib/gemini';
 import {
   BarChart,
   Bar,
@@ -181,6 +182,7 @@ function Dashboard() {
   const [discountChange, setDiscountChange] = useState<number>(0);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [xaiMessage, setXaiMessage] = useState<string | null>(null);
+  const [isXaiLoading, setIsXaiLoading] = useState(false);
 
   const seedSampleData = async () => {
     if (!user) return;
@@ -251,6 +253,42 @@ function Dashboard() {
   const [marketCondition, setMarketCondition] = useState<'normal' | 'recession' | 'growth'>('normal');
   const [savedScenarios, setSavedScenarios] = useState<any[]>([]);
   const [scenarioNameInput, setScenarioNameInput] = useState('');
+
+  // Performance Optimization: Pre-compute highlight maps for O(1) rendering
+  const highlightMap = useMemo(() => {
+    const primary = new Set<string>();
+    const secondary = new Set<string>();
+    const dimmed = new Set<string>();
+
+    if (selectedNodes.length === 0) return { primary, secondary, dimmed };
+
+    selectedNodes.forEach(n => primary.add(n.id));
+    const firstSel = selectedNodes[0];
+
+    if (firstSel.type === 'shop') {
+      const shopProducts = graphData.products.filter((p: any) => p.shopId === firstSel.id);
+      const shopRegions = new Set(shopProducts.map((p: any) => p.regionId));
+      shopProducts.forEach((p: any) => secondary.add(p.id));
+      graphData.regions.forEach((r: any) => { if (shopRegions.has(r.id)) secondary.add(r.id); });
+    } else if (firstSel.type === 'region') {
+      const regionProducts = graphData.products.filter((p: any) => p.regionId === firstSel.id);
+      const regionShops = new Set(regionProducts.map((p: any) => p.shopId));
+      regionProducts.forEach((p: any) => secondary.add(p.id));
+      graphData.shops.forEach((s: any) => { if (regionShops.has(s.id)) secondary.add(s.id); });
+    } else {
+      const selProds = selectedNodes.filter(n => n.type === 'product');
+      selProds.forEach((sp: any) => {
+        secondary.add(sp.shopId);
+        secondary.add(sp.regionId);
+      });
+    }
+
+    graphData.nodes.forEach((n: any) => {
+      if (!primary.has(n.id) && !secondary.has(n.id)) dimmed.add(n.id);
+    });
+
+    return { primary, secondary, dimmed };
+  }, [selectedNodes, graphData]);
 
   // Helper: format VND
   const fmtVND = (v: number) => {
@@ -399,12 +437,35 @@ function Dashboard() {
     recalcAggregates(newData);
     setGraphData(newData);
     
-    setXaiMessage(`✅ Đã tối ưu ${changesCount} sản phẩm.\n💡 Chiến lược: ${strategyDesc}\n📈 Doanh thu thay đổi: ${totalGain >= 0 ? '+' : ''}₫${fmtVND(Math.floor(totalGain))}`);
+    const myUpdated = newData.shops.find((s: any) => s.isMe);
+    const revenueToSave = myUpdated?.totalRevenue;
+
+    // Get top 3 products by revenue after optimization to show to AI
+    const topPerformers = newData.products
+      .filter((p: any) => p.shopId === myShop.id)
+      .sort((a: any, b: any) => b.revenue - a.revenue)
+      .slice(0, 3);
+
+    setXaiMessage(`✅ Đã tối ưu ${changesCount} sản phẩm. Đang phân tích chiến lược...`);
+    setIsXaiLoading(true);
+
+    getGeminiStrategyExplanation(
+      myShop.name,
+      changesCount,
+      totalGain,
+      strategyDesc,
+      marketCondition === 'normal' ? 'Bình thường' : marketCondition === 'recession' ? 'Suy thoái' : 'Tăng trưởng',
+      topPerformers
+    ).then(explanation => {
+      setXaiMessage(`✅ Đã tối ưu ${changesCount} sản phẩm.\n💡 Chiến lược: ${strategyDesc}\n📈 Doanh thu thay đổi: ${totalGain >= 0 ? '+' : ''}₫${fmtVND(Math.floor(totalGain))}${explanation ? '\n' + explanation : ''}`);
+      setIsXaiLoading(false);
+    }).catch(() => {
+      setXaiMessage(`✅ Đã tối ưu ${changesCount} sản phẩm.\n💡 Chiến lược: ${strategyDesc}\n📈 Doanh thu thay đổi: ${totalGain >= 0 ? '+' : ''}₫${fmtVND(Math.floor(totalGain))}`);
+      setIsXaiLoading(false);
+    });
     
     setTimeout(() => graphRef.current?.d3ReheatSimulation(), 100);
-    
-    const myUpdated = newData.shops.find((s: any) => s.isMe);
-    saveScenarioByName(scenarioNameInput || "Auto Optimize", myUpdated?.totalRevenue);
+    saveScenarioByName(scenarioNameInput || "Auto Optimize", revenueToSave);
   };
 
   const resetSimulation = () => {
@@ -504,17 +565,71 @@ function Dashboard() {
     }));
 
     const loadGraph = (rows: CrawledRow[]) => {
-      const rawData = generateGraphData(rows);
-      setGraphData(rawData);
-      setInitialData(JSON.parse(JSON.stringify(rawData, (k, v) => v instanceof Float32Array ? Array.from(v) : v)));
-      d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
-      setHasData(true);
+      setLoadingProgress(60);
+      
+      // Performance: Use Web Worker for GNN if possible
+      if (window.Worker) {
+        const worker = new Worker(new URL('./lib/gnnWorker.ts', import.meta.url), { type: 'module' });
+        
+        // Generate structural data for GNN
+        const rawData = generateGraphData(rows);
+        
+        worker.postMessage({
+          type: 'RUN_GNN',
+          nodes: rawData.nodes.map(n => ({...n, embedding: undefined})), // strip heavy objects
+          links: rawData.links.map(l => ({source: l.source, target: l.target, type: l.type})),
+          metrics: rawData.metrics
+        });
 
-      // Store GNN result
-      if (rawData.gnnResult) {
-        gnnResultRef.current = rawData.gnnResult;
-        setGnnReady(true);
-        console.log('[App] GNN initialized with', rawData.gnnResult.gnnScores.size, 'node scores');
+        worker.onmessage = (e) => {
+          if (e.data.type === 'GNN_RESULT') {
+            const { gnnScores, competitionScores, embeddings } = e.data;
+            
+            // Reconstruct GNN result into rawData
+            rawData.nodes.forEach((n: any) => {
+              n.gnnScore = gnnScores[n.id] || 0;
+              // Reconstruct Float32Array from sent array
+              if (embeddings[n.id]) n.embedding = new Float32Array(embeddings[n.id]);
+            });
+
+            // Update competition links from Worker results
+            const structuralLinks = rawData.links.filter(l => l.type !== 'competes_with');
+            const gnnCompLinks: any[] = [];
+            Object.entries(competitionScores).forEach(([pId, comps]: [string, any]) => {
+              comps.forEach((c: any) => {
+                gnnCompLinks.push({ source: pId, target: c.targetId, type: 'competes_with', competitionStrength: c.score });
+              });
+            });
+            rawData.links = [...structuralLinks, ...gnnCompLinks];
+            
+            gnnResultRef.current = {
+              embeddings: new Map(Object.entries(embeddings).map(([k, v]) => [k, new Float32Array(v as number[])])),
+              gnnScores: new Map(Object.entries(gnnScores)),
+              competitionScores: new Map(Object.entries(competitionScores)),
+              predictions: new Map() // filler
+            };
+
+            setGraphData(rawData);
+            setInitialData(JSON.parse(JSON.stringify(rawData, (k, v) => v instanceof Float32Array ? Array.from(v) : v)));
+            d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
+            setHasData(true);
+            setGnnReady(true);
+            setLoadingProgress(100);
+            worker.terminate();
+          }
+        };
+      } else {
+        // Fallback to sync if worker fails
+        const rawData = generateGraphData(rows);
+        setGraphData(rawData);
+        setInitialData(JSON.parse(JSON.stringify(rawData, (k, v) => v instanceof Float32Array ? Array.from(v) : v)));
+        d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
+        if (rawData.gnnResult) {
+          gnnResultRef.current = rawData.gnnResult;
+          setGnnReady(true);
+        }
+        setHasData(true);
+        setLoadingProgress(100);
       }
     };
 
@@ -689,65 +804,33 @@ function Dashboard() {
   }, [graphData, dataLoading, dimensions]);
 
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const label = node.name;
-    const fontSize = Math.max(12 / globalScale, 2);
-    ctx.font = `600 ${fontSize}px Inter, sans-serif`;
-    const m = graphData.metrics;
+    const isPrimarySelected = highlightMap.primary.has(node.id);
+    const isSecondarySelected = highlightMap.secondary.has(node.id);
+    const isDimmed = highlightMap.dimmed.has(node.id);
 
-    const isPrimarySelected = selectedNodes.some(n => n.id === node.id);
-    let isSecondarySelected = false;
-    let isDimmed = false;
+    // LOD: Level of Detail optimization
+    const hideLabel = globalScale < 0.8 && !isPrimarySelected;
+    const hideShadow = globalScale < 1.2 && !isPrimarySelected;
 
-    if (selectedNodes.length > 0) {
-      if (selectedNodes[0].type === 'shop') {
-        const shopProducts = graphData.products.filter((p: any) => p.shopId === selectedNodes[0].id);
-        const shopRegions = shopProducts.map((p: any) => p.regionId);
-        if (node.type === 'product' && shopProducts.some((p: any) => p.id === node.id)) {
-          isSecondarySelected = true;
-        } else if (node.type === 'region' && shopRegions.includes(node.id)) {
-          isSecondarySelected = true;
-        } else if (!isPrimarySelected) {
-          isDimmed = true;
-        }
-      } else if (selectedNodes[0].type === 'region') {
-        const regionProducts = graphData.products.filter((p: any) => p.regionId === selectedNodes[0].id);
-        const regionShops = [...new Set(regionProducts.map((p: any) => p.shopId))];
-        if (node.type === 'product' && regionProducts.some((p: any) => p.id === node.id)) {
-          isSecondarySelected = true;
-        } else if (node.type === 'shop' && regionShops.includes(node.id)) {
-          isSecondarySelected = true;
-        } else if (!isPrimarySelected) {
-          isDimmed = true;
-        }
-      } else {
-        const selProds = selectedNodes.filter(n => n.type === 'product');
-        if (node.type === 'shop' && selProds.some((sp: any) => sp.shopId === node.id)) {
-          isSecondarySelected = true;
-        } else if (node.type === 'region' && selProds.some((sp: any) => sp.regionId === node.id)) {
-          isSecondarySelected = true;
-        } else if (!isPrimarySelected) {
-          isDimmed = true;
-        }
-      }
+    // Cache radius/styling on node if not exists (Performance)
+    if (!node.__r) {
+      const m = graphData.metrics;
+      if (node.type === 'product') node.__r = 6 + Math.sqrt(node.revenue / m.maxProductRevenue) * 16;
+      else if (node.type === 'shop') node.__r = 10 + Math.sqrt((node.totalRevenue || 0) / m.maxShopRevenue) * 14;
+      else if (node.type === 'region') node.__r = 14 + Math.sqrt((node.totalRevenue || 0) / m.maxRegionRevenue) * 12;
+      else node.__r = 10;
     }
 
-    // Revenue-based sizing
-    let nodeR = 10;
-    if (node.type === 'product') {
-      nodeR = 6 + Math.sqrt(node.revenue / m.maxProductRevenue) * 16;
-    } else if (node.type === 'shop') {
-      nodeR = 10 + Math.sqrt((node.totalRevenue || 0) / m.maxShopRevenue) * 14;
-    } else if (node.type === 'region') {
-      nodeR = 14 + Math.sqrt((node.totalRevenue || 0) / m.maxRegionRevenue) * 12;
-    }
-
+    const nodeR = node.__r;
     const radius = isPrimarySelected ? nodeR + 4 : isSecondarySelected ? nodeR + 2 : nodeR;
     const fillStyle = node.type === 'region' ? '#0d9488' : node.type === 'shop' ? (node.isMe ? '#1de5e2' : '#2d3748') : '#1de5e2';
     
     ctx.globalAlpha = isDimmed ? 0.15 : 1;
 
-    if (isPrimarySelected) { ctx.shadowColor = '#1de5e2'; ctx.shadowBlur = 20 / globalScale; }
-    else if (isSecondarySelected) { ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 15 / globalScale; }
+    if (!hideShadow) {
+      if (isPrimarySelected) { ctx.shadowColor = '#1de5e2'; ctx.shadowBlur = 20 / globalScale; }
+      else if (isSecondarySelected) { ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 15 / globalScale; }
+    }
     else { ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 8 / globalScale; }
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = isPrimarySelected || isSecondarySelected ? 0 : 2 / globalScale;
@@ -772,19 +855,19 @@ function Dashboard() {
     }
 
     // Label + stats
-    if (globalScale > 1.2 || isPrimarySelected || isSecondarySelected) {
+    if (!hideLabel) {
+      const fontSize = Math.max(12 / globalScale, 2);
+      ctx.font = `${isPrimarySelected ? '700' : '500'} ${fontSize}px Inter, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      
+      const label = node.name;
       const truncLabel = label.length > 20 ? label.substring(0, 18) + '...' : label;
-      const textWidth = ctx.measureText(truncLabel).width;
-      const bckgDimensions = [textWidth + fontSize * 0.4, fontSize * 1.2];
       
       ctx.fillStyle = `rgba(255,255,255,${isDimmed ? 0.4 : 0.85})`;
-      ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y + radius + 2 / globalScale, bckgDimensions[0], bckgDimensions[1]);
-      ctx.fillStyle = isPrimarySelected ? '#0f172a' : isSecondarySelected ? '#b45309' : '#475569';
-      ctx.fillText(truncLabel, node.x, node.y + radius + 2 / globalScale + fontSize * 0.1);
+      ctx.fillText(truncLabel, node.x, node.y + radius + 2 / globalScale);
 
       // Stats on deep zoom
-      if (globalScale > 2.0) {
+      if (globalScale > 2.0 && !isDimmed) {
         const statsFontSize = fontSize * 0.75;
         ctx.font = `500 ${statsFontSize}px Inter, sans-serif`;
         let statsText = '';
@@ -793,16 +876,13 @@ function Dashboard() {
         else if (node.type === 'region') statsText = `₫${(node.totalRevenue/1e9).toFixed(1)}B total`;
         
         if (statsText) {
-          const sw = ctx.measureText(statsText).width;
-          ctx.fillStyle = `rgba(255,255,255,0.85)`;
-          ctx.fillRect(node.x - sw / 2 - 2, node.y + radius + 2 / globalScale + bckgDimensions[1], sw + 4, statsFontSize * 1.2);
-          ctx.fillStyle = '#6366f1';
-          ctx.fillText(statsText, node.x, node.y + radius + 2 / globalScale + bckgDimensions[1] + statsFontSize * 0.1);
+          ctx.fillStyle = "rgba(255,255,255,0.6)";
+          ctx.fillText(statsText, node.x, node.y + radius + 2 / globalScale + fontSize * 1.2);
         }
       }
     }
     ctx.globalAlpha = 1;
-  }, [selectedNodes, graphData.metrics]);
+  }, [selectedNodes, graphData, highlightMap]);
 
   useEffect(() => {
     
@@ -913,8 +993,25 @@ function Dashboard() {
     saveScenarioByName(`KM ${primaryNode.name.substring(0,20)}: ${(newDiscount*100).toFixed(0)}%`, myShop?.totalRevenue);
 
     if (discountChange !== 0 || priceChange !== 0) {
-      const gnnTag = gnn ? ' [GNN-Enhanced]' : '';
-      setXaiMessage(`${gnnTag} Bối cảnh ${marketCondition.toUpperCase()}: Giá ${priceChange}% | KM ${discountChange}%. Lượng bán: ${newSold.toLocaleString()}. DT: ₫${fmtVND(Math.floor(newRevenue))}.${gnnExplanation ? '\n' + gnnExplanation : ''}`);
+      const gnnTag = gnn ? '[GNN]' : '';
+      const baseMsg = `${gnnTag} ${marketCondition.toUpperCase()}: Giá ${priceChange}% | KM ${discountChange}%. Lượt bán: ${newSold.toLocaleString()}. Doanh thu: ₫${fmtVND(Math.floor(newRevenue))}.`;
+      
+      setXaiMessage(baseMsg + "\n(AI đang phân tích...)");
+      setIsXaiLoading(true);
+
+      getGeminiXAIExplanation(
+        primaryNode,
+        { priceChange, discountChange },
+        { newSold, newRevenue, revenueDelta: newRevenue - (primaryNode.originalPrice * (1 - primaryNode.originalDiscount) * primaryNode.originalSold) },
+        marketCondition,
+        gnnExplanation
+      ).then(explanation => {
+        setXaiMessage(baseMsg + "\n" + explanation);
+        setIsXaiLoading(false);
+      }).catch(() => {
+        setXaiMessage(baseMsg);
+        setIsXaiLoading(false);
+      });
     } else {
       setXaiMessage(`Không thay đổi giá trị. Doanh thu giữ nguyên.`);
     }
@@ -1411,6 +1508,10 @@ function Dashboard() {
                       setXaiMessage(null);
                     }}
                     backgroundColor="#f8fafc"
+                    d3AlphaDecay={0.03}
+                    d3VelocityDecay={0.4}
+                    cooldownTicks={100}
+                    cooldownTime={3000}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-400 font-medium">
@@ -1441,8 +1542,12 @@ function Dashboard() {
                       <button title="Khôi phục trạng thái gốc" onClick={resetSimulation} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors group">
                         <RotateCcw size={12} className="group-hover:-rotate-90 transition-transform duration-300"/> Khôi phục gốc
                       </button>
-                      <button onClick={optimizeMyProfit} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors">
-                        <BrainCircuit size={12}/> Auto Optimize
+                      <button 
+                        onClick={optimizeMyProfit} 
+                        disabled={isXaiLoading}
+                        className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors disabled:opacity-50"
+                      >
+                        <BrainCircuit size={12}/> {isXaiLoading ? "Đang xử lý..." : "Auto Optimize"}
                       </button>
                     </div>
                   </div>
@@ -1608,8 +1713,7 @@ function Dashboard() {
                         )}
                       </div>
                       </div>
-                      </div>
-
+                    
                       {/* GNN Intelligence Panel */}
                       {gnnReady && selectedNodes[0].type === 'product' && (() => {
                         const gnn = gnnResultRef.current;
@@ -1619,7 +1723,7 @@ function Dashboard() {
                         const myShopProducts = graphData.products.filter((p: any) => p.shopId === selectedNodes[0].shopId);
                         const cannibalized = gnn ? detectCannibalization(myShopProducts, gnn.embeddings, 0.8).filter(c => c.productA === nodeId || c.productB === nodeId) : [];
                         return (
-                          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden shrink-0 mx-4 mb-2">
+                          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden shrink-0">
                             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-2.5 border-b border-indigo-100 flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><BrainCircuit size={12} /></div>
@@ -1668,7 +1772,8 @@ function Dashboard() {
                       })()}
 
                       {/* Simulation & XAI Panel for Single Product */}
-                      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
+                      {selectedNodes[0].type === 'product' && (
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
                         <div className="bg-blue-50 p-2.5 border-b border-blue-100 flex items-start gap-2 shrink-0">
                           <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                             <Activity size={12} />
@@ -1735,20 +1840,26 @@ function Dashboard() {
                           </div>
                           <button
                             onClick={runSimulation}
-                            className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors shadow-sm shrink-0"
+                            disabled={isXaiLoading}
+                            className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors shadow-sm shrink-0 disabled:opacity-50"
                           >
-                            <Play size={14} /> Chạy Mô Phỏng
+                            <Play size={14} /> {isXaiLoading ? "Đang phân tích..." : "Chạy Mô Phỏng"}
                           </button>
 
-                          {xaiMessage && (
-                            <div className="mt-1 text-[11px] p-2 rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white text-indigo-900 leading-tight shadow-inner whitespace-pre-line">
+                          {(xaiMessage || isXaiLoading) && (
+                            <div className="mt-1 text-[11px] p-2 rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white text-indigo-900 leading-tight shadow-inner whitespace-pre-line relative overflow-hidden">
                               <div className="flex items-center gap-1.5 font-bold mb-1 text-indigo-800">
-                                <BrainCircuit size={12} /> AI Phân Tích
+                                <BrainCircuit size={12} className={isXaiLoading ? "animate-pulse" : ""} /> AI Phân Tích
+                                {isXaiLoading && <Loader2 size={10} className="animate-spin ml-auto" />}
                               </div>
                               {xaiMessage}
+                              {isXaiLoading && !xaiMessage && <div className="h-4 w-full bg-slate-200 animate-pulse rounded mt-1"></div>}
                             </div>
                           )}
                         </div>
+                      </div>
+                      )}
+                      
                       </div>
                     </>
                 ) : selectedNodes.length > 1 ? (
