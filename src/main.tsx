@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { AuthProvider } from './lib/auth';
 
 window.addEventListener('error', (e) => {
   console.error("GLOBAL ERROR:", e.error?.stack || e.message);
@@ -12,5 +13,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 createRoot(document.getElementById('root')!).render(
-  <App />
+  <AuthProvider>
+    <App />
+  </AuthProvider>
 );

@@ -24,6 +24,7 @@ import {
 import ForceGraph2D from "react-force-graph-2d";
 import { generateGraphData } from "./graphData";
 import type { GraphMetrics, CrawledRow } from "./graphData";
+import staticRawData from './crawledData.json';
 import Chatbot from "./components/Chatbot";
 import { AuthProvider, useAuth } from "./lib/auth";
 import LoginPage from "./components/LoginPage";
@@ -75,9 +76,100 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
+function LoadingScreen({ progress }: { progress: number }) {
+  return (
+    <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-[#0f172a]">
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(20)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-2 h-2 rounded-full bg-[#30E9CD]/20"
+            initial={{ 
+              x: Math.random() * 100 + "%", 
+              y: Math.random() * 100 + "%",
+              scale: Math.random() * 0.5 + 0.5
+            }}
+            animate={{ 
+              y: ["100%", "-100%"],
+              opacity: [0, 1, 0]
+            }}
+            transition={{ 
+              duration: Math.random() * 5 + 5, 
+              repeat: Infinity, 
+              ease: "linear",
+              delay: Math.random() * 5
+            }}
+          />
+        ))}
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 flex flex-col items-center gap-8"
+      >
+        <div className="relative">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="p-4 rounded-3xl border-2 border-dashed border-[#30E9CD]/30"
+          >
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#30E9CD] to-[#20c4ab] shadow-[0_0_40px_rgba(48,233,205,0.3)]">
+              <Network size={48} className="text-[#0f172a]" />
+            </div>
+          </motion.div>
+          <motion.div
+            animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }}
+            transition={{ duration: 4, repeat: Infinity }}
+            className="absolute inset-0 bg-[#30E9CD] blur-3xl -z-10 rounded-full"
+          />
+        </div>
+
+        <div className="text-center">
+          <h1 className="text-4xl font-black text-white tracking-tighter mb-2">
+            GraphRetail <span className="text-[#30E9CD]">AI</span>
+          </h1>
+          <p className="text-slate-400 font-medium tracking-[0.3em] uppercase text-[10px]">Architecting Retail Intelligence</p>
+        </div>
+
+        <div className="w-72">
+          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-[1px]">
+            <motion.div 
+              className="h-full bg-gradient-to-r from-[#30E9CD] via-[#20c4ab] to-[#30E9CD] bg-[length:200%_100%]"
+              initial={{ width: 0 }}
+              animate={{ 
+                width: `${progress}%`,
+                backgroundPosition: ["0% 0%", "100% 0%"]
+              }}
+              transition={{ 
+                width: { type: "spring", damping: 20, stiffness: 40 },
+                backgroundPosition: { duration: 2, repeat: Infinity, ease: "linear" }
+              }}
+            />
+          </div>
+          <div className="mt-4 flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <span className="flex items-center gap-2">
+              <motion.span 
+                animate={{ opacity: [1, 0.5, 1] }} 
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="w-1.5 h-1.5 rounded-full bg-[#30E9CD]"
+              />
+              System Initializing
+            </span>
+            <span className="text-white tabular-nums font-mono">{Math.round(progress)}%</span>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user, signOut } = useAuth();
   const [dataLoading, setDataLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [hasData, setHasData] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourKey, setTourKey] = useState(0);
@@ -88,6 +180,47 @@ function Dashboard() {
   const [discountChange, setDiscountChange] = useState<number>(0);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [xaiMessage, setXaiMessage] = useState<string | null>(null);
+
+  const seedSampleData = async () => {
+    if (!user) return;
+    setDataLoading(true);
+    setLoadingProgress(10);
+    
+    try {
+      setLoadingProgress(30);
+      
+      // Use imported staticRawData directly
+      const staticData = staticRawData;
+      
+      // Take a representative sample to avoid overwhelming the request (max 500 rows)
+      const sample = staticData.slice(0, 500).map((r: any) => ({
+        user_id: user.id,
+        name: r.name,
+        price: r.price,
+        rating: r.rating,
+        sold_count: r.sold,
+        region: r.region,
+        promotion: r.discount,
+        shop_name: r.shop
+      }));
+      
+      setLoadingProgress(60);
+      
+      const { error } = await supabase.from('products').insert(sample);
+      if (error) throw error;
+      
+      setLoadingProgress(90);
+      console.log("App: Sample data seeded successfully for", user.id);
+      
+      // Trigger a reload of the actual data
+      window.location.reload();
+    } catch (err) {
+      console.error("App: Seeding failed:", err);
+      alert("Không thể đồng bộ dữ liệu. Hãy đảm bảo bảng 'products' có đủ các cột: user_id, name, price, rating, sold_count, region, promotion, shop_name.");
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   const [graphData, setGraphData] = useState<any>({
     nodes: [],
@@ -106,7 +239,7 @@ function Dashboard() {
   
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState<{ width: number, height: number } | null>(null);
 
   // Economic Scenarios & Optimization
   const [marketCondition, setMarketCondition] = useState<'normal' | 'recession' | 'growth'>('normal');
@@ -377,37 +510,47 @@ function Dashboard() {
       setDataLoading(true);
 
       try {
-        // Lấy thông tin profile để có display_name
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', user.id)
-          .single();
-
-        const displayName = profile?.display_name || user.email;
-        console.log(`App: Đang tải dữ liệu cho ${displayName}...`);
+        // Log user context for debugging
+        console.log(`App: Loading data for User ID: ${user.id}`);
         
-        let { data: rows, error } = await supabase
-          .from('products')
-          .select('*')
-          .eq('user_id', user.id);
+        // Parallel fetch profile and products
+        const [profileRes, productsRes] = await Promise.all([
+          supabase.from('profiles').select('display_name').eq('id', user.id).single(),
+          supabase.from('products').select('*').eq('user_id', user.id)
+        ]);
 
-        if (error) {
-          console.error('App: Lỗi fetch data:', error);
-          setHasData(false);
-        } else if (rows && rows.length > 0) {
-          console.log(`App: Thành công! Tìm thấy ${rows.length} bản ghi của ${displayName}`);
-          loadGraph(mapRows(rows));
+        const displayName = profileRes.data?.display_name || user.email;
+        console.log(`App: Logged in as ${displayName}`);
+
+        if (productsRes.error) {
+          console.error('App: Supabase Fetch Error:', productsRes.error);
+          throw productsRes.error;
+        }
+
+        if (productsRes.data && productsRes.data.length > 0) {
+          console.log(`App: Found ${productsRes.data.length} actual records for ${user.id}`);
+          loadGraph(mapRows(productsRes.data));
           setHasData(true);
         } else {
-          console.log(`App: Không tìm thấy dữ liệu cho ${displayName} (ID: ${user.id})`);
-          setHasData(false);
+          // No data found for this specific user ID - this is where we might have a matching issue
+          console.warn(`App: No data records found for user_id: ${user.id}. Falling back to sample data.`);
+          
+          // Double check if there's any data at all (for debugging)
+          const { count } = await supabase.from('products').select('*', { count: 'exact', head: true });
+          console.log(`App: Total records in 'products' table: ${count}`);
+          
+          loadGraph([]); // Fallback to sample data
+          setHasData(true); 
         }
       } catch (err) {
-        console.error('App: Exception trong loadData:', err);
-        setHasData(false);
+        console.error('App: Critical data loading error:', err);
+        // Even on error, we might want to show sample data instead of a blank screen
+        loadGraph([]);
+        setHasData(true);
       } finally {
-        setDataLoading(false);
+        // Ensure progress reaches 100%
+        setLoadingProgress(100);
+        setTimeout(() => setDataLoading(false), 800);
       }
     };
 
@@ -447,15 +590,22 @@ function Dashboard() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    
+    let resizeTimer: any;
     const measure = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         setDimensions({ width: rect.width, height: rect.height });
-        // Force graph re-center on resize
-        if (graphRef.current) {
-          graphRef.current.centerAt(0, 0, 400);
-        }
+        
+        // Use a slight delay to ensure the canvas has resized before centering
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (graphRef.current) {
+            // Zoom to fit with padding to ensure the graph fills the screen properly
+            graphRef.current.zoomToFit(800, 40);
+          }
+        }, 150);
       }
     };
     
@@ -464,22 +614,37 @@ function Dashboard() {
     });
     
     observer.observe(containerRef.current);
-    measure(); // Immediate measure
     
-    return () => observer.disconnect();
-  }, []);
+    // Attempt multiple measures as the layout stabilizes
+    measure();
+    const t1 = setTimeout(measure, 100);
+    const t2 = setTimeout(measure, 500);
+    const t3 = setTimeout(measure, 1000);
+    
+    return () => {
+      observer.disconnect();
+      clearTimeout(resizeTimer);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [isSidebarOpen, graphData.nodes.length]); // Re-run when sidebar or data changes
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (graphRef.current) {
-        graphRef.current.d3Force('charge').strength(-300);
+        const nodeCount = graphData.nodes.length;
+        // Dynamic charge based on node count to prevent "empty space" or "overcrowding"
+        const chargeStrength = nodeCount < 20 ? -800 : nodeCount < 50 ? -500 : -300;
+        graphRef.current.d3Force('charge').strength(chargeStrength);
+        
         const m = graphData.metrics;
         graphRef.current.d3Force('link').distance((link: any) => {
-          if (link.type === 'located_in') return 200;
+          if (link.type === 'located_in') return 180;
           if (link.type === 'sells') {
             const prod = graphData.products.find((p: any) => p.id === (typeof link.target === 'object' ? link.target.id : link.target));
             const revRatio = prod ? prod.revenue / m.maxProductRevenue : 0.5;
-            return 80 + (1 - revRatio) * 80;
+            return 70 + (1 - revRatio) * 70;
           }
           if (link.type === 'competes_with') {
             const srcId = typeof link.source === 'object' ? link.source.id : link.source;
@@ -489,13 +654,22 @@ function Dashboard() {
             if (a && b) {
               const diff = Math.abs(a.price - b.price);
               const avg = (a.price + b.price) / 2 || 1;
-              return 60 + (diff / avg) * 200;
+              return 50 + (diff / avg) * 150;
             }
-            return 160;
+            return 140;
           }
-          return 120;
+          return 100;
         });
+        
+        // Add a center force to keep everything from drifting too far
+        graphRef.current.d3Force('center').x(0).y(0);
+        
         graphRef.current.d3ReheatSimulation();
+        
+        // Re-fit after simulation settles a bit
+        setTimeout(() => {
+          if (graphRef.current) graphRef.current.zoomToFit(600, 40);
+        }, 500);
       }
     }, 100);
     return () => clearTimeout(timer);
@@ -643,6 +817,12 @@ function Dashboard() {
     setDiscountChange(0);
     setPriceChange(0);
     setXaiMessage(null);
+
+    // Auto-center and zoom on clicked node for immediate focus
+    if (graphRef.current && !multiSelectMode && !event.shiftKey) {
+      graphRef.current.centerAt(safeNode.x, safeNode.y, 800);
+      graphRef.current.zoom(2.5, 800);
+    }
   };
 
   const runSimulation = () => {
@@ -885,17 +1065,29 @@ function Dashboard() {
     }
   };
 
+  useEffect(() => {
+    if (!dataLoading) return;
+    
+    const interval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => setDataLoading(false), 500); // Small delay after 100%
+          return 100;
+        }
+        const diff = Math.random() * 15;
+        return Math.min(100, prev + diff);
+      });
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, [dataLoading]);
+
   if (dataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
-        <div className="text-center">
-          <Loader2 size={40} className="animate-spin mx-auto mb-4" style={{ color: '#30E9CD' }} />
-          <p className="text-slate-400 font-medium">Đang tải dữ liệu...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen progress={loadingProgress} />;
   }
 
+  if (!hasData) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)' }}>
         <div className="text-center max-w-md mx-4">
@@ -904,18 +1096,28 @@ function Dashboard() {
           </div>
           <h2 className="text-2xl font-bold text-white mb-3">Chưa có dữ liệu</h2>
           <p className="text-slate-400 mb-6 leading-relaxed">
-            Tài khoản của bạn chưa có dữ liệu crawl. Hãy sử dụng Extension trình duyệt để crawl dữ liệu từ các cửa hàng bạn muốn phân tích.
+            Tài khoản của bạn chưa có dữ liệu crawl. Hãy sử dụng Extension trình duyệt để crawl dữ liệu, hoặc đồng bộ dữ liệu mẫu để trải nghiệm dashboard ngay.
           </p>
-          <button
-            onClick={signOut}
-            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-[#1de5e2] border border-[#1de5e2]/20 hover:bg-[#1de5e2]/10 transition-colors cursor-pointer"
-          >
-            <LogOut size={14} className="inline mr-2" />
-            Đăng xuất
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={seedSampleData}
+              className="w-full px-6 py-3 bg-[#1de5e2] hover:bg-[#1de5e2]/90 text-[#0f172a] font-bold rounded-xl transition-all shadow-lg shadow-[#1de5e2]/20"
+            >
+              <Database size={18} className="inline mr-2" />
+              Đồng bộ dữ liệu mẫu
+            </button>
+            <button
+              onClick={signOut}
+              className="w-full px-6 py-3 rounded-xl text-sm font-semibold text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              <LogOut size={14} className="inline mr-2" />
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </div>
     );
+  }
 
   return (
     <div className="h-screen bg-slate-50 text-slate-900 font-sans flex flex-col overflow-hidden">
@@ -1051,6 +1253,14 @@ function Dashboard() {
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${multiSelectMode ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
+          <div className="w-px h-6 bg-slate-200 mx-1"></div>
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className={`p-2 rounded-lg transition-all border ${isSidebarOpen ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-[#30E9CD]/10 text-[#30E9CD] border-[#30E9CD]/20'}`}
+            title={isSidebarOpen ? "Ẩn Panel" : "Hiện Panel"}
+          >
+            <Activity size={20} className={!isSidebarOpen ? 'animate-pulse' : ''} />
+          </button>
           <button 
             onClick={() => setShowAddProduct(true)}
             className="add-product-btn flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg text-sm font-bold transition-colors border border-emerald-200"
@@ -1099,359 +1309,383 @@ function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2.5"><div className="w-5 h-[2px] bg-slate-300"></div> Located In</div>
                 <div className="flex items-center gap-2.5"><div className="w-5 h-[2px] bg-red-300 border-t-2 border-dashed"></div> Cạnh tranh</div>
-                <div className="text-[9px] text-slate-400 mt-1 italic">Node lớn = doanh thu cao</div>
+                <div className="text-[9px] text-slate-400 mt-1 italic font-bold">Node lớn = doanh thu cao</div>
               </div>
+              <button 
+                onClick={() => graphRef.current?.zoomToFit(800, 100)}
+                className="mt-4 w-full flex items-center justify-center gap-2 py-2 bg-slate-800 text-white rounded-lg hover:bg-black transition-all text-[11px] font-bold"
+              >
+                <Network size={14} /> Căn giữa biểu đồ
+              </button>
             </div>
 
             <div className="absolute inset-0 cursor-crosshair bg-[#f8fafc]">
               <ErrorBoundary>
-                <ForceGraph2D
-                  ref={graphRef}
-                  width={dimensions.width}
-                  height={dimensions.height}
-                  graphData={d3DataRef.current}
-                  nodeCanvasObject={nodeCanvasObject}
-                  nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
-                    ctx.fillStyle = color;
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, 16, 0, 2 * Math.PI, false);
-                    ctx.fill();
-                  }}
-                  linkColor={(link: any) => {
-                    if (selectedNodes.length > 0) {
-                      const selId = selectedNodes[0].id;
-                      const srcId = typeof link.source === 'object' ? link.source.id : link.source;
-                      const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
-                      const isRelated = srcId === selId || tgtId === selId || 
-                        (selectedNodes[0].type === 'shop' && graphData.products.some((p: any) => p.shopId === selId && (p.id === srcId || p.id === tgtId)));
-                      if (!isRelated) return link.type === 'competes_with' ? 'rgba(203,213,225,0.1)' : 'rgba(148,163,184,0.12)';
-                      if (link.type === 'competes_with') return 'rgba(239,68,68,0.7)';
-                      return 'rgba(29, 229, 226, 0.8)';
-                    }
-                    if (link.type === 'competes_with') return 'rgba(239,68,68,0.25)';
-                    if (link.type === 'sells') return 'rgba(29, 229, 226, 0.35)';
-                    return 'rgba(148,163,184,0.3)';
-                  }}
-                  linkWidth={(link: any) => {
-                    if (link.type === 'competes_with') {
-                      const srcId = typeof link.source === 'object' ? link.source.id : link.source;
-                      const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
-                      const a = graphData.products.find((p: any) => p.id === srcId);
-                      const b = graphData.products.find((p: any) => p.id === tgtId);
-                      if (a && b) {
-                        const diff = Math.abs(a.price - b.price);
-                        const avg = (a.price + b.price) / 2 || 1;
-                        return 0.5 + (1 - diff / avg) * 2.5;
+                {dimensions ? (
+                  <ForceGraph2D
+                    ref={graphRef}
+                    width={dimensions.width}
+                    height={dimensions.height}
+                    graphData={d3DataRef.current}
+                    nodeCanvasObject={nodeCanvasObject}
+                    nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
+                      ctx.fillStyle = color;
+                      ctx.beginPath();
+                      ctx.arc(node.x, node.y, 16, 0, 2 * Math.PI, false);
+                      ctx.fill();
+                    }}
+                    linkColor={(link: any) => {
+                      if (selectedNodes.length > 0) {
+                        const selId = selectedNodes[0].id;
+                        const srcId = typeof link.source === 'object' ? link.source.id : link.source;
+                        const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
+                        const isRelated = srcId === selId || tgtId === selId || 
+                          (selectedNodes[0].type === 'shop' && graphData.products.some((p: any) => p.shopId === selId && (p.id === srcId || p.id === tgtId)));
+                        if (!isRelated) return link.type === 'competes_with' ? 'rgba(203,213,225,0.1)' : 'rgba(148,163,184,0.12)';
+                        if (link.type === 'competes_with') return 'rgba(239,68,68,0.7)';
+                        return 'rgba(29, 229, 226, 0.8)';
                       }
-                      return 0.5;
-                    }
-                    if (link.type === 'sells') {
+                      if (link.type === 'competes_with') return 'rgba(239,68,68,0.25)';
+                      if (link.type === 'sells') return 'rgba(29, 229, 226, 0.35)';
+                      return 'rgba(148,163,184,0.3)';
+                    }}
+                    linkWidth={(link: any) => {
+                      if (link.type === 'competes_with') {
+                        const srcId = typeof link.source === 'object' ? link.source.id : link.source;
+                        const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
+                        const a = graphData.products.find((p: any) => p.id === srcId);
+                        const b = graphData.products.find((p: any) => p.id === tgtId);
+                        if (a && b) {
+                          const diff = Math.abs(a.price - b.price);
+                          const avg = (a.price + b.price) / 2 || 1;
+                          return 0.5 + (1 - diff / avg) * 2.5;
+                        }
+                        return 0.5;
+                      }
+                      if (link.type === 'sells') {
+                        const prodId = typeof link.target === 'object' ? link.target.id : link.target;
+                        const prod = graphData.products.find((p: any) => p.id === prodId);
+                        return prod ? 0.5 + (prod.revenue / graphData.metrics.maxProductRevenue) * 3 : 1;
+                      }
+                      return 1;
+                    }}
+                    linkLineDash={(link: any) => link.type === 'competes_with' ? [4, 4] : []}
+                    linkDirectionalParticles={(link: any) => link.type === 'sells' ? 3 : 0}
+                    linkDirectionalParticleWidth={(link: any) => {
                       const prodId = typeof link.target === 'object' ? link.target.id : link.target;
                       const prod = graphData.products.find((p: any) => p.id === prodId);
-                      return prod ? 0.5 + (prod.revenue / graphData.metrics.maxProductRevenue) * 3 : 1;
-                    }
-                    return 1;
-                  }}
-                  linkLineDash={(link: any) => link.type === 'competes_with' ? [4, 4] : []}
-                  linkDirectionalParticles={(link: any) => link.type === 'sells' ? 3 : 0}
-                  linkDirectionalParticleWidth={(link: any) => {
-                    const prodId = typeof link.target === 'object' ? link.target.id : link.target;
-                    const prod = graphData.products.find((p: any) => p.id === prodId);
-                    return prod ? 1 + (prod.revenue / graphData.metrics.maxProductRevenue) * 3 : 1.5;
-                  }}
-                  linkDirectionalParticleSpeed={0.004}
-                  linkDirectionalParticleColor={() => "#fbbf24"}
-                  onNodeClick={handleNodeClick}
-                  onBackgroundClick={() => {
-                    setSelectedNodes([]);
-                    setDiscountChange(0);
-                    setXaiMessage(null);
-                  }}
-                  backgroundColor="#f8fafc"
-                />
+                      return prod ? 1 + (prod.revenue / graphData.metrics.maxProductRevenue) * 3 : 1.5;
+                    }}
+                    linkDirectionalParticleSpeed={0.004}
+                    linkDirectionalParticleColor={() => "#fbbf24"}
+                    onNodeClick={handleNodeClick}
+                    onBackgroundClick={() => {
+                      setSelectedNodes([]);
+                      setDiscountChange(0);
+                      setXaiMessage(null);
+                    }}
+                    backgroundColor="#f8fafc"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400 font-medium">
+                    <Loader2 className="animate-spin mr-2" size={20} /> Calculating Viewport...
+                  </div>
+                )}
               </ErrorBoundary>
             </div>
           </div>
 
           {/* Right Panel: Controls & Metrics */}
-          <div className="w-[380px] bg-slate-50 flex flex-col shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 shrink-0 intelligence-dashboard">
-            {/* 1. Global Scenario Top Area (Compact & Always Visible) */}
-            <div className="p-3 border-b border-slate-200 bg-white shrink-0 shadow-sm z-20">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                  <Globe size={16} /> Market Scenarios
-                </h2>
-                <div className="flex gap-1.5">
-                  <button title="Khôi phục trạng thái gốc" onClick={resetSimulation} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors group">
-                    <RotateCcw size={12} className="group-hover:-rotate-90 transition-transform duration-300"/> Khôi phục gốc
-                  </button>
-                  <button onClick={optimizeMyProfit} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors">
-                    <BrainCircuit size={12}/> Auto Optimize
-                  </button>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2 mb-2">
-                <select 
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded text-xs font-semibold px-2 py-1.5 outline-none text-slate-700 focus:border-blue-500"
-                  value={marketCondition}
-                  onChange={(e) => applyMarketCondition(e.target.value as any)}
-                >
-                  <option value="normal">Economy: Normal</option>
-                  <option value="growth">Economy: Growth</option>
-                  <option value="recession">Economy: Recession</option>
-                </select>
-              </div>
+          <AnimatePresence mode="wait">
+            {isSidebarOpen && (
+              <motion.div 
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 380, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="bg-slate-50 flex flex-col shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 shrink-0 intelligence-dashboard overflow-hidden"
+              >
+                {/* 1. Global Scenario Top Area (Compact & Always Visible) */}
+                <div className="p-3 border-b border-slate-200 bg-white shrink-0 shadow-sm z-20">
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <Globe size={16} /> Market Scenarios
+                    </h2>
+                    <div className="flex gap-1.5">
+                      <button title="Khôi phục trạng thái gốc" onClick={resetSimulation} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors group">
+                        <RotateCcw size={12} className="group-hover:-rotate-90 transition-transform duration-300"/> Khôi phục gốc
+                      </button>
+                      <button onClick={optimizeMyProfit} className="text-[10px] uppercase font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 py-1.5 px-2 rounded flex items-center gap-1 transition-colors">
+                        <BrainCircuit size={12}/> Auto Optimize
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 mb-2">
+                    <select 
+                      className="flex-1 bg-slate-50 border border-slate-300 rounded text-xs font-semibold px-2 py-1.5 outline-none text-slate-700 focus:border-blue-500"
+                      value={marketCondition}
+                      onChange={(e) => applyMarketCondition(e.target.value as any)}
+                    >
+                      <option value="normal">Economy: Normal</option>
+                      <option value="growth">Economy: Growth</option>
+                      <option value="recession">Economy: Recession</option>
+                    </select>
+                  </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex-1 relative">
-                  <Save size={12} className="absolute left-2.5 top-2 text-slate-400" />
-                  <input 
-                    type="text"
-                    className="w-full bg-slate-50 border border-slate-300 rounded text-xs pl-7 pr-2 py-1.5 outline-none placeholder:text-slate-400 focus:border-blue-500"
-                    placeholder="Scenario name..."
-                    value={scenarioNameInput}
-                    onChange={e => setScenarioNameInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && saveScenario()}
-                  />
-                </div>
-                <button 
-                  onClick={saveScenario}
-                  className="bg-slate-800 hover:bg-black text-white text-[11px] px-3 py-1.5 font-bold rounded transition-colors"
-                >
-                  Save
-                </button>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 relative">
+                      <Save size={12} className="absolute left-2.5 top-2 text-slate-400" />
+                      <input 
+                        type="text"
+                        className="w-full bg-slate-50 border border-slate-300 rounded text-xs pl-7 pr-2 py-1.5 outline-none placeholder:text-slate-400 focus:border-blue-500"
+                        placeholder="Scenario name..."
+                        value={scenarioNameInput}
+                        onChange={e => setScenarioNameInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && saveScenario()}
+                      />
+                    </div>
+                    <button 
+                      onClick={saveScenario}
+                      className="bg-slate-800 hover:bg-black text-white text-[11px] px-3 py-1.5 font-bold rounded transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
 
-              {savedScenarios.length > 0 && (
-                <div className="mt-2 flex flex-col gap-1 max-h-24 overflow-y-auto pr-1 border-t border-slate-100 pt-2">
-                  {savedScenarios.map((sc) => (
-                    <div key={sc.id} className="flex justify-between items-center bg-white/60 p-2 mb-1 rounded border border-slate-200">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-[11px]">{sc.name}</span>
-                        <span className="text-[9px] text-slate-400 uppercase">{sc.condition}</span>
-                      </div>
-                      <div className="text-right">
-                        {/* Dòng 1: Hiện giá (Con số nhỏ) */}
-                        {sc.price && (
-                          <div className="text-[10px] font-bold text-blue-600">
-                            Giá: ₫{fmtVND(sc.price)}
+                  {savedScenarios.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1 max-h-24 overflow-y-auto pr-1 border-t border-slate-100 pt-2">
+                      {savedScenarios.map((sc) => (
+                        <div key={sc.id} className="flex justify-between items-center bg-white/60 p-2 mb-1 rounded border border-slate-200">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-[11px]">{sc.name}</span>
+                            <span className="text-[9px] text-slate-400 uppercase">{sc.condition}</span>
                           </div>
-                        )}
-                        {/* Dòng 2: Hiện lợi nhuận (Con số lớn) */}
-                        <div className="text-[11px] font-mono font-black text-slate-800">
-                          DT: ₫{sc.revenue ? fmtVND(sc.revenue) : '0'}
+                          <div className="text-right">
+                            {/* Dòng 1: Hiện giá (Con số nhỏ) */}
+                            {sc.price && (
+                              <div className="text-[10px] font-bold text-blue-600">
+                                Giá: ₫{fmtVND(sc.price)}
+                              </div>
+                            )}
+                            {/* Dòng 2: Hiện lợi nhuận (Con số lớn) */}
+                            <div className="text-[11px] font-mono font-black text-slate-800">
+                              DT: ₫{sc.revenue ? fmtVND(sc.revenue) : '0'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* 2. Node Context Info (Flex 1) */}
-            <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-              {selectedNodes.length === 1 ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Node Info block */}
-                  <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 shrink-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-bold text-lg text-slate-900 line-clamp-1 mr-2">{selectedNodes[0].name}</h3>
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide shrink-0 ${
-                        selectedNodes[0].type === 'shop' ? 'bg-blue-100 text-blue-700' : 
-                        selectedNodes[0].type === 'product' ? 'bg-orange-100 text-orange-700' : 
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {selectedNodes[0].type === 'product' ? 'Sản phẩm' : selectedNodes[0].type === 'shop' ? 'Shop' : 'Vùng'}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-2 text-sm">
-                      {selectedNodes[0].type === 'product' ? (
-                      <>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá hiện tại</p>
-                          <p className="font-mono text-base font-bold text-slate-900">₫{fmtVND(selectedNodes[0].price * (1 - selectedNodes[0].discount))}</p>
+                {/* 2. Node Context Info (Flex 1) */}
+                <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                  {selectedNodes.length === 1 ? (
+                    <>
+                      <div className="p-4 flex flex-col gap-4">
+                      {/* Node Info block */}
+                      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 shrink-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-bold text-lg text-slate-900 line-clamp-1 mr-2">{selectedNodes[0].name}</h3>
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide shrink-0 ${
+                            selectedNodes[0].type === 'shop' ? 'bg-blue-100 text-blue-700' : 
+                            selectedNodes[0].type === 'product' ? 'bg-orange-100 text-orange-700' : 
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {selectedNodes[0].type === 'product' ? 'Sản phẩm' : selectedNodes[0].type === 'shop' ? 'Shop' : 'Vùng'}
+                          </span>
                         </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá gốc</p>
-                          <p className="font-mono text-base font-bold text-slate-500 line-through">₫{fmtVND(selectedNodes[0].price)}</p>
+                        
+                        <div className="grid grid-cols-2 gap-y-2 gap-x-2 text-sm">
+                          {selectedNodes[0].type === 'product' ? (
+                          <>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá hiện tại</p>
+                              <p className="font-mono text-base font-bold text-slate-900">₫{fmtVND(selectedNodes[0].price * (1 - selectedNodes[0].discount))}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá gốc</p>
+                              <p className="font-mono text-base font-bold text-slate-500 line-through">₫{fmtVND(selectedNodes[0].price)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Khuyến mại</p>
+                              <p className="font-mono text-base font-bold text-emerald-600">{(selectedNodes[0].discount * 100).toFixed(0)}%</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Đã bán</p>
+                              <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].sold.toLocaleString()}</p>
+                            </div>
+                            <div className="col-span-2 flex justify-between items-center border-t border-slate-100 pt-2 mt-1">
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Doanh thu dự kiến</p>
+                              <p className="font-mono text-lg font-black text-emerald-600">₫{fmtVND(Math.floor(selectedNodes[0].revenue))}</p>
+                            </div>
+                          </>
+                        ) : selectedNodes[0].type === 'shop' ? (
+                          <>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Tổng Doanh thu</p>
+                              <p className="font-mono text-base font-bold text-emerald-600">₫{fmtVND(selectedNodes[0].totalRevenue)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Đánh giá</p>
+                              <p className="font-mono text-base font-bold text-slate-900 flex items-center gap-1">
+                                {selectedNodes[0].rating} <span className="text-orange-400 text-sm">★</span>
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số sản phẩm</p>
+                              <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].productCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá trung bình</p>
+                              <p className="font-mono text-base font-bold text-slate-600">₫{fmtVND(selectedNodes[0].avgPrice)}</p>
+                            </div>
+                            <div className="col-span-2 pt-2 mt-1 border-t border-slate-100 flex flex-col items-center gap-2">
+                              {selectedNodes[0].isMe ? (
+                                <>
+                                  <span className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full border border-purple-200">
+                                    Đây là Cửa hàng của bạn
+                                  </span>
+                                  <button
+                                    onClick={handleUnsetMyShop}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-rose-500 underline transition-colors"
+                                  >
+                                    Hủy chọn Cửa hàng này
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => handleSetMyShop(selectedNodes[0].id)}
+                                  className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 px-4 py-1.5 rounded shadow-sm transition-colors"
+                                >
+                                  Đặt làm Cửa hàng của tôi
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Tổng Doanh thu</p>
+                              <p className="font-mono text-base font-bold text-emerald-600">₫{fmtVND(selectedNodes[0].totalRevenue)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số Shop</p>
+                              <p className="font-mono text-base font-bold text-purple-600">{selectedNodes[0].shopCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số Sản phẩm</p>
+                              <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].productCount}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      </div>
+                      </div>
+
+                      {/* Simulation & XAI Panel for Single Product */}
+                      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
+                        <div className="bg-blue-50 p-2.5 border-b border-blue-100 flex items-start gap-2 shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                            <Activity size={12} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs">Phân tích Nhu cầu</h4>
+                            <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Điều chỉnh KM để dự báo doanh thu.</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Khuyến mại</p>
-                          <p className="font-mono text-base font-bold text-emerald-600">{(selectedNodes[0].discount * 100).toFixed(0)}%</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Đã bán</p>
-                          <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].sold.toLocaleString()}</p>
-                        </div>
-                        <div className="col-span-2 flex justify-between items-center border-t border-slate-100 pt-2 mt-1">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Doanh thu dự kiến</p>
-                          <p className="font-mono text-lg font-black text-emerald-600">₫{fmtVND(Math.floor(selectedNodes[0].revenue))}</p>
-                        </div>
-                      </>
-                    ) : selectedNodes[0].type === 'shop' ? (
-                      <>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Tổng Doanh thu</p>
-                          <p className="font-mono text-base font-bold text-emerald-600">₫{fmtVND(selectedNodes[0].totalRevenue)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Đánh giá</p>
-                          <p className="font-mono text-base font-bold text-slate-900 flex items-center gap-1">
-                            {selectedNodes[0].rating} <span className="text-orange-400 text-sm">★</span>
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số sản phẩm</p>
-                          <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].productCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Giá trung bình</p>
-                          <p className="font-mono text-base font-bold text-slate-600">₫{fmtVND(selectedNodes[0].avgPrice)}</p>
-                        </div>
-                        <div className="col-span-2 pt-2 mt-1 border-t border-slate-100 flex flex-col items-center gap-2">
-                          {selectedNodes[0].isMe ? (
-                            <>
-                              <span className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full border border-purple-200">
-                                Đây là Cửa hàng của bạn
-                              </span>
-                              <button
-                                onClick={handleUnsetMyShop}
-                                className="text-[10px] font-bold text-slate-400 hover:text-rose-500 underline transition-colors"
-                              >
-                                Hủy chọn Cửa hàng này
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => handleSetMyShop(selectedNodes[0].id)}
-                              className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 px-4 py-1.5 rounded shadow-sm transition-colors"
-                            >
-                              Đặt làm Cửa hàng của tôi
-                            </button>
+                        
+                        <div className="p-3 flex flex-col gap-3 overflow-y-auto flex-1 h-full min-h-0">
+                          {/* Demand Forecast Chart */}
+                          <div className="h-32 w-full bg-white rounded border border-slate-100 p-1 mb-1">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={generateRevenueCurve(selectedNodes[0])}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="discount" type="number" domain={[0, 60]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                                <YAxis tickFormatter={(v) => fmtVND(v)} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
+                                <Tooltip formatter={(value: number, name: string) => [fmtVND(value), 'Doanh thu']} labelFormatter={(v) => `KM: ${v}%`} contentStyle={{ fontSize: '11px', borderRadius: '8px' }} />
+                                <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                                <ReferenceDot x={Math.min(60, Math.floor((selectedNodes[0].originalDiscount + discountChange/100)*100))} y={selectedNodes[0].price * (1 - Math.min(0.6, selectedNodes[0].originalDiscount + discountChange/100)) * Math.max(0, Math.floor(selectedNodes[0].originalSold * (1 + (Math.min(0.6, selectedNodes[0].originalDiscount + discountChange/100) - selectedNodes[0].originalDiscount) * 2)))} r={4} fill="#ef4444" stroke="white" strokeWidth={2} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs mt-2">
+                            <span className="font-bold text-slate-600">Điều chỉnh Giá</span>
+                            <span className={`font-mono font-bold ${priceChange > 0 ? "text-rose-500" : priceChange < 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                              {priceChange > 0 ? "+" : ""}{priceChange}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-50"
+                            max="50"
+                            value={priceChange}
+                            onChange={(e) => setPriceChange(Number(e.target.value))}
+                            className="w-full h-1.5 accent-rose-600 bg-slate-200 rounded-lg appearance-none cursor-pointer mb-2"
+                          />
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-600">Mức Khuyến Mại Thêm</span>
+                            <span className={`font-mono font-bold ${discountChange > 0 ? "text-rose-500" : discountChange < 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                              {discountChange > 0 ? "+" : ""}{discountChange}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-30"
+                            max="30"
+                            value={discountChange}
+                            onChange={(e) => setDiscountChange(Number(e.target.value))}
+                            className="w-full h-1.5 accent-blue-600 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-600 uppercase flex items-center gap-1"><Save size={10}/> Lưu Kịch Bản</label>
+                            <input 
+                              type="text" 
+                              value={scenarioNameInput}
+                              onChange={e => setScenarioNameInput(e.target.value)}
+                              className="w-full border border-slate-300 rounded overflow-hidden px-2 py-1.5 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all bg-white"
+                              placeholder="VD: Tung siêu sale 50%..."
+                            />
+                          </div>
+                          <button
+                            onClick={runSimulation}
+                            className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors shadow-sm shrink-0"
+                          >
+                            <Play size={14} /> Chạy Mô Phỏng
+                          </button>
+
+                          {xaiMessage && (
+                            <div className="mt-1 text-[11px] p-2 rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white text-indigo-900 leading-tight shadow-inner whitespace-pre-line">
+                              <div className="flex items-center gap-1.5 font-bold mb-1 text-indigo-800">
+                                <BrainCircuit size={12} /> AI Phân Tích
+                              </div>
+                              {xaiMessage}
+                            </div>
                           )}
                         </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Tổng Doanh thu</p>
-                          <p className="font-mono text-base font-bold text-emerald-600">₫{fmtVND(selectedNodes[0].totalRevenue)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số Shop</p>
-                          <p className="font-mono text-base font-bold text-purple-600">{selectedNodes[0].shopCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-0.5">Số Sản phẩm</p>
-                          <p className="font-mono text-base font-bold text-blue-600">{selectedNodes[0].productCount}</p>
-                        </div>
-                      </>
-                    )}
+                      </div>
+                    </>
+                ) : selectedNodes.length > 1 ? (
+                  <div className="h-full">
+                    {renderComparisonView()}
                   </div>
-                </div>
-
-                {/* Simulation & XAI Panel for Single Product */}
-                  <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
-                    <div className="bg-blue-50 p-2.5 border-b border-blue-100 flex items-start gap-2 shrink-0">
-                      <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                        <Activity size={12} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800 text-xs">Phân tích Nhu cầu</h4>
-                        <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Điều chỉnh KM để dự báo doanh thu.</p>
-                      </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                    <div className="w-16 h-16 mb-4 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Network size={32} className="text-slate-300" />
                     </div>
-                    
-                    <div className="p-3 flex flex-col gap-3 overflow-y-auto flex-1 h-full min-h-0">
-                      {/* Demand Forecast Chart */}
-                      <div className="h-32 w-full bg-white rounded border border-slate-100 p-1 mb-1">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={generateRevenueCurve(selectedNodes[0])}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="discount" type="number" domain={[0, 60]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                            <YAxis tickFormatter={(v) => fmtVND(v)} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
-                            <Tooltip formatter={(value: number, name: string) => [fmtVND(value), 'Doanh thu']} labelFormatter={(v) => `KM: ${v}%`} contentStyle={{ fontSize: '11px', borderRadius: '8px' }} />
-                            <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                            <ReferenceDot x={Math.min(60, Math.floor((selectedNodes[0].originalDiscount + discountChange/100)*100))} y={selectedNodes[0].price * (1 - Math.min(0.6, selectedNodes[0].originalDiscount + discountChange/100)) * Math.max(0, Math.floor(selectedNodes[0].originalSold * (1 + (Math.min(0.6, selectedNodes[0].originalDiscount + discountChange/100) - selectedNodes[0].originalDiscount) * 2)))} r={4} fill="#ef4444" stroke="white" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs mt-2">
-                        <span className="font-bold text-slate-600">Điều chỉnh Giá</span>
-                        <span className={`font-mono font-bold ${priceChange > 0 ? "text-rose-500" : priceChange < 0 ? "text-emerald-600" : "text-slate-500"}`}>
-                          {priceChange > 0 ? "+" : ""}{priceChange}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        value={priceChange}
-                        onChange={(e) => setPriceChange(Number(e.target.value))}
-                        className="w-full h-1.5 accent-rose-600 bg-slate-200 rounded-lg appearance-none cursor-pointer mb-2"
-                      />
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-600">Mức Khuyến Mại Thêm</span>
-                        <span className={`font-mono font-bold ${discountChange > 0 ? "text-rose-500" : discountChange < 0 ? "text-emerald-600" : "text-slate-500"}`}>
-                          {discountChange > 0 ? "+" : ""}{discountChange}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="-30"
-                        max="30"
-                        value={discountChange}
-                        onChange={(e) => setDiscountChange(Number(e.target.value))}
-                        className="w-full h-1.5 accent-blue-600 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-slate-600 uppercase flex items-center gap-1"><Save size={10}/> Lưu Kịch Bản</label>
-                        <input 
-                          type="text" 
-                          value={scenarioNameInput}
-                          onChange={e => setScenarioNameInput(e.target.value)}
-                          className="w-full border border-slate-300 rounded overflow-hidden px-2 py-1.5 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all bg-white"
-                          placeholder="VD: Tung siêu sale 50%..."
-                        />
-                      </div>
-                      <button
-                        onClick={runSimulation}
-                        className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors shadow-sm shrink-0"
-                      >
-                        <Play size={14} /> Chạy Mô Phỏng
-                      </button>
-
-                      {xaiMessage && (
-                        <div className="mt-1 text-[11px] p-2 rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white text-indigo-900 leading-tight shadow-inner whitespace-pre-line">
-                          <div className="flex items-center gap-1.5 font-bold mb-1 text-indigo-800">
-                            <BrainCircuit size={12} /> AI Phân Tích
-                          </div>
-                          {xaiMessage}
-                        </div>
-                      )}
-                    </div>
+                    <p className="font-medium text-slate-500 text-sm">Click on a node in the graph to view intelligence.</p>
                   </div>
-              </div>
-            ) : selectedNodes.length > 1 ? (
-              <div className="h-full">
-                {renderComparisonView()}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                <div className="w-16 h-16 mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                  <Network size={32} className="text-slate-300" />
+                )}
                 </div>
-                <p className="font-medium text-slate-500 text-sm">Click on a node in the graph to view intelligence.</p>
-              </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </div>
-      </div>
-    </main>
+      </main>
 
     {/* Chatbot Integration */}
       <Chatbot 

@@ -61,7 +61,7 @@ export interface GraphMetrics {
 }
 
 export function generateGraphData(data?: CrawledRow[]) {
-  const rawData = data || staticRawData;
+  const rawData = (data && data.length > 0) ? data : staticRawData;
   const products: ProductNode[] = [];
   const shops: ShopNode[] = [];
   const regions: RegionNode[] = [];
