@@ -9,8 +9,7 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || ''),
-      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || ''),
+      // Đã gỡ bỏ define thủ công để Vite tự động nhận diện VITE_ từ .env
     },
     resolve: {
       alias: {

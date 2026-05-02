@@ -1340,8 +1340,9 @@ export default function App() {
     {/* Chatbot Integration */}
       <Chatbot 
         selectedNode={selectedNodes[0] || null} 
-        simulationHistory={[]} 
+        simulationHistory={savedScenarios} 
         graphData={graphData} 
+        marketCondition={marketCondition}
       />
     </div>
   );
