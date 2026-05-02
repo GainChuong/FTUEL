@@ -1,4 +1,14 @@
-import rawData from './crawledData.json';
+import staticRawData from './crawledData.json';
+
+export interface CrawledRow {
+  shop: string;
+  name: string;
+  rating: number;
+  price: number;
+  sold: number;
+  region: string;
+  discount: number;
+}
 
 export interface ProductNode {
   id: string;
@@ -50,7 +60,8 @@ export interface GraphMetrics {
   maxSold: number;
 }
 
-export function generateGraphData() {
+export function generateGraphData(data?: CrawledRow[]) {
+  const rawData = data || staticRawData;
   const products: ProductNode[] = [];
   const shops: ShopNode[] = [];
   const regions: RegionNode[] = [];

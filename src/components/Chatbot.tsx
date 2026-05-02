@@ -344,7 +344,7 @@ Câu hỏi của người dùng: ${userQuery}
         onDragStart={() => { isDraggingBtn.current = true; }}
         onDragEnd={() => { setTimeout(() => { isDraggingBtn.current = false; }, 150); }}
         onClick={() => { if (!isDraggingBtn.current) setIsOpen(true); }}
-        className="chatbot-btn fixed bottom-6 right-6 p-4 bg-orange-500 text-white rounded-full shadow-xl hover:bg-orange-600 cursor-grab z-50"
+        className="chatbot-btn fixed bottom-6 right-6 p-4 bg-[#1de5e2] text-slate-900 rounded-full shadow-xl hover:shadow-[#1de5e2]/30 cursor-grab z-50 border-2 border-white/50"
         style={{ x, y, opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto' }}
       >
         <Sparkles size={24} />
@@ -365,7 +365,7 @@ Câu hỏi của người dùng: ${userQuery}
           >
             {/* Header */}
             <div
-              className="p-4 bg-blue-700 text-white flex items-center justify-between shadow-md z-10 cursor-grab active:cursor-grabbing relative"
+              className="p-4 bg-[#2d3748] text-white flex items-center justify-between shadow-md z-10 cursor-grab active:cursor-grabbing relative border-b border-white/10"
               onPointerDown={(e) => dragControls.start(e)}
             >
               <div className="absolute top-1 left-1/2 -translate-x-1/2 opacity-40">
@@ -378,21 +378,21 @@ Câu hỏi của người dùng: ${userQuery}
                 </div>
                 <div>
                   <h3 className="font-bold text-base leading-tight">Graph Retail AI</h3>
-                  <p className="text-blue-100 text-[10px] font-medium tracking-wide uppercase">Chiến lược & Phân tích</p>
+                  <p className="text-[#1de5e2] text-[10px] font-bold tracking-wide uppercase">Chiến lược & Phân tích</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
-                  className={`p-2 rounded-lg transition-colors ${showHistory ? 'bg-white/20 text-white' : 'text-blue-100 hover:text-white hover:bg-white/10'}`}
+                  className={`p-2 rounded-lg transition-colors ${showHistory ? 'bg-white/20 text-[#1de5e2]' : 'text-slate-300 hover:text-white hover:bg-white/10'}`}
                   title="Lịch sử trò chuyện"
                 >
                   <History size={18} />
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="p-2 text-blue-100 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                  className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -412,11 +412,11 @@ Câu hỏi của người dùng: ${userQuery}
                   >
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                        <History size={16} className="text-blue-600" /> Lịch sử
+                        <History size={16} className="text-[#0d9488]" /> Lịch sử
                       </h4>
                       <button
                         onClick={createNewSession}
-                        className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
+                        className="p-1.5 bg-[#1de5e2]/10 text-[#0d9488] rounded-md hover:bg-[#1de5e2]/20 transition-colors"
                         title="Cuộc trò chuyện mới"
                       >
                         <Plus size={16} />
@@ -427,9 +427,9 @@ Câu hỏi của người dùng: ${userQuery}
                         <button
                           key={s.id}
                           onClick={() => loadSession(s.id)}
-                          className={`w-full text-left p-3 rounded-xl transition-all flex flex-col gap-1 ${currentSessionId === s.id ? 'bg-blue-50 border border-blue-100 shadow-sm' : 'hover:bg-slate-50 border border-transparent'}`}
+                          className={`w-full text-left p-3 rounded-xl transition-all flex flex-col gap-1 ${currentSessionId === s.id ? 'bg-[#1de5e2]/5 border border-[#1de5e2]/20 shadow-sm' : 'hover:bg-slate-50 border border-transparent'}`}
                         >
-                          <span className={`text-sm font-semibold ${currentSessionId === s.id ? 'text-blue-700' : 'text-slate-700'}`}>{s.title}</span>
+                          <span className={`text-sm font-semibold ${currentSessionId === s.id ? 'text-[#0d9488]' : 'text-slate-700'}`}>{s.title}</span>
                           <span className="text-[10px] text-slate-400">{new Date(s.created_at).toLocaleDateString('vi-VN')}</span>
                         </button>
                       ))}
@@ -449,10 +449,10 @@ Câu hỏi của người dùng: ${userQuery}
                   <>
                     {messages.map((msg, idx) => (
                       <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-800 text-white' : 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'}`}>
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-800 text-white' : 'bg-gradient-to-br from-[#1de5e2] to-[#0d9488] text-slate-900 font-bold'}`}>
                           {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                         </div>
-                        <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
+                        <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${msg.role === 'user' ? 'bg-[#2d3748] text-white rounded-tr-none border border-white/5' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
                           <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert' : 'prose-slate'}`}>
                             <Markdown>{msg.text}</Markdown>
                           </div>
@@ -485,11 +485,11 @@ Câu hỏi của người dùng: ${userQuery}
 
                     {isLoading && (
                       <div className="flex gap-3 flex-row">
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1de5e2] to-[#0d9488] text-slate-900 flex items-center justify-center shrink-0 shadow-sm">
                           <Bot size={16} />
                         </div>
                         <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 rounded-tl-none flex items-center gap-3 shadow-sm">
-                          <Loader2 size={16} className="animate-spin text-blue-600" />
+                          <Loader2 size={16} className="animate-spin text-[#0d9488]" />
                           <span className="text-xs font-semibold text-slate-500 animate-pulse">Đang phân tích dữ liệu thị trường...</span>
                         </div>
                       </div>
@@ -501,7 +501,7 @@ Câu hỏi của người dùng: ${userQuery}
 
               {/* Input Area */}
               <div className="p-4 bg-white border-t border-slate-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-[#1de5e2] focus-within:ring-4 focus-within:ring-[#1de5e2]/10 transition-all">
                   <input
                     type="text"
                     value={input}
@@ -514,7 +514,7 @@ Câu hỏi của người dùng: ${userQuery}
                   <button
                     onClick={handleSend}
                     disabled={!input.trim() || isLoading || isInitializing}
-                    className="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95"
+                    className="p-2.5 bg-[#1de5e2] text-slate-900 font-bold rounded-lg hover:bg-[#34e0c5] disabled:opacity-50 transition-all shadow-md active:scale-95"
                   >
                     <Send size={16} />
                   </button>

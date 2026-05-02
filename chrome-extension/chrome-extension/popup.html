@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shopee Crawler</title>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            width: 250px;
+            padding: 15px;
+            text-align: center;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        #startBtn { background-color: #ee4d2d; color: white; }
+        #stopBtn { background-color: #555; color: white; }
+        #downloadBtn { background-color: #28a745; color: white; }
+        #clearBtn { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; }
+        .status { margin-top: 10px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <h3 style="color: #ee4d2d; margin-top: 0;">Shopee Crawler</h3>
+    <button id="startBtn">Bắt đầu Cuộn & Crawl</button>
+    <button id="stopBtn">Dừng lại</button>
+    <button id="downloadBtn">Tải File CSV</button>
+    <button id="clearBtn">Xóa dữ liệu (Reset)</button>
+    <div class="status" id="statusText">Trạng thái: Đang chờ...</div>
+    <div class="status" id="countText">Số sản phẩm: 0</div>
+    <script src="popup.js"></script>
+</body>
+</html>

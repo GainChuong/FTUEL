@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Crawler App",
+  "version": "1.0",
+  "description": "Auto scroll and extract Shopee product data to CSV.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://shopee.vn/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Shopee Crawler"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://shopee.vn/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["*://shopee.vn/*"]
+    }
+  ]
+}

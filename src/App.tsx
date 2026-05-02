@@ -16,12 +16,18 @@ import {
   RotateCcw,
   Save,
   Trash2,
-  MapPin
+  MapPin,
+  LogOut,
+  Loader2,
+  Database
 } from "lucide-react";
 import ForceGraph2D from "react-force-graph-2d";
 import { generateGraphData } from "./graphData";
-import type { GraphMetrics } from "./graphData";
+import type { GraphMetrics, CrawledRow } from "./graphData";
 import Chatbot from "./components/Chatbot";
+import { AuthProvider, useAuth } from "./lib/auth";
+import LoginPage from "./components/LoginPage";
+import { supabase } from "./lib/supabase";
 import {
   BarChart,
   Bar,
@@ -69,7 +75,10 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
-export default function App() {
+function Dashboard() {
+  const { user, signOut } = useAuth();
+  const [dataLoading, setDataLoading] = useState(true);
+  const [hasData, setHasData] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourKey, setTourKey] = useState(0);
   
@@ -343,19 +352,73 @@ export default function App() {
   const [initialData, setInitialData] = useState<any>(null);
 
   useEffect(() => {
-    const rawData = generateGraphData();
-    
-    setGraphData(rawData);
-    setInitialData(JSON.parse(JSON.stringify(rawData)));
+    if (!user) return;
 
-    d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
-    
+    const mapRows = (rows: any[]): CrawledRow[] => rows.map((r: any) => ({
+      shop: (r.shop_name || '').trim(),
+      name: r.name || '',
+      rating: Number(r.rating) || 0,
+      price: Number(r.price) || 0,
+      sold: Number(r.sold_count) || 0,
+      region: r.region || '',
+      discount: Number(r.promotion) || 0,
+    }));
+
+    const loadGraph = (rows: CrawledRow[]) => {
+      const rawData = generateGraphData(rows);
+      setGraphData(rawData);
+      setInitialData(JSON.parse(JSON.stringify(rawData)));
+      d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
+      setHasData(true);
+    };
+
+    const loadData = async () => {
+      setHasData(false);
+      setDataLoading(true);
+
+      try {
+        // Lấy thông tin profile để có display_name
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .single();
+
+        const displayName = profile?.display_name || user.email;
+        console.log(`App: Đang tải dữ liệu cho ${displayName}...`);
+        
+        let { data: rows, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('App: Lỗi fetch data:', error);
+          setHasData(false);
+        } else if (rows && rows.length > 0) {
+          console.log(`App: Thành công! Tìm thấy ${rows.length} bản ghi của ${displayName}`);
+          loadGraph(mapRows(rows));
+          setHasData(true);
+        } else {
+          console.log(`App: Không tìm thấy dữ liệu cho ${displayName} (ID: ${user.id})`);
+          setHasData(false);
+        }
+      } catch (err) {
+        console.error('App: Exception trong loadData:', err);
+        setHasData(false);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+
+    loadData();
+
     const isTutorialCompleted = localStorage.getItem('retailAiTutorialCompleted');
     if (!isTutorialCompleted) {
       const tourTimer = setTimeout(() => setRunTour(true), 1000);
       return () => clearTimeout(tourTimer);
     }
-  }, []);
+  }, [user?.id, supabase]);
 
   useEffect(() => {
     if (!d3DataRef.current.nodes.length && !graphData.nodes.length) return;
@@ -384,15 +447,25 @@ export default function App() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (let entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
+    const measure = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDimensions({ width: rect.width, height: rect.height });
+        // Force graph re-center on resize
+        if (graphRef.current) {
+          graphRef.current.centerAt(0, 0, 400);
+        }
       }
+    };
+    
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(measure);
     });
+    
     observer.observe(containerRef.current);
+    measure(); // Immediate measure
+    
     return () => observer.disconnect();
   }, []);
 
@@ -482,11 +555,11 @@ export default function App() {
     }
 
     const radius = isPrimarySelected ? nodeR + 4 : isSecondarySelected ? nodeR + 2 : nodeR;
-    const fillStyle = node.type === 'region' ? '#ef4444' : node.type === 'shop' ? (node.isMe ? '#a855f7' : '#2563eb') : '#f97316';
+    const fillStyle = node.type === 'region' ? '#0d9488' : node.type === 'shop' ? (node.isMe ? '#1de5e2' : '#2d3748') : '#1de5e2';
     
     ctx.globalAlpha = isDimmed ? 0.15 : 1;
 
-    if (isPrimarySelected) { ctx.shadowColor = '#f97316'; ctx.shadowBlur = 20 / globalScale; }
+    if (isPrimarySelected) { ctx.shadowColor = '#1de5e2'; ctx.shadowBlur = 20 / globalScale; }
     else if (isSecondarySelected) { ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 15 / globalScale; }
     else { ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 8 / globalScale; }
     ctx.shadowOffsetX = 0;
@@ -812,8 +885,40 @@ export default function App() {
     }
   };
 
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+        <div className="text-center">
+          <Loader2 size={40} className="animate-spin mx-auto mb-4" style={{ color: '#30E9CD' }} />
+          <p className="text-slate-400 font-medium">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)' }}>
+        <div className="text-center max-w-md mx-4">
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(29, 229, 226, 0.1)' }}>
+            <Database size={36} style={{ color: '#1de5e2' }} />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">Chưa có dữ liệu</h2>
+          <p className="text-slate-400 mb-6 leading-relaxed">
+            Tài khoản của bạn chưa có dữ liệu crawl. Hãy sử dụng Extension trình duyệt để crawl dữ liệu từ các cửa hàng bạn muốn phân tích.
+          </p>
+          <button
+            onClick={signOut}
+            className="px-6 py-2.5 rounded-xl text-sm font-semibold text-[#1de5e2] border border-[#1de5e2]/20 hover:bg-[#1de5e2]/10 transition-colors cursor-pointer"
+          >
+            <LogOut size={14} className="inline mr-2" />
+            Đăng xuất
+          </button>
+        </div>
+      </div>
+    );
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+    <div className="h-screen bg-slate-50 text-slate-900 font-sans flex flex-col overflow-hidden">
       <Joyride
         key={tourKey}
         callback={handleJoyrideCallback}
@@ -827,7 +932,7 @@ export default function App() {
         styles={{
           options: {
             zIndex: 10000,
-            primaryColor: '#f97316',
+            primaryColor: '#1de5e2',
           },
         }}
         locale={{
@@ -925,12 +1030,12 @@ export default function App() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-600 text-white rounded-lg shadow-md">
-            <Network size={24} />
+          <div className="p-2 rounded-lg shadow-md" style={{ background: 'linear-gradient(135deg, #30E9CD, #20c4ab)' }}>
+            <Network size={24} className="text-slate-900" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Graph Retail AI</h1>
-            <p className="text-sm text-slate-500 font-medium">Competitive Intelligence & Simulation</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">GraphRetail <span style={{ color: '#30E9CD' }}>AI</span></h1>
+            <p className="text-sm text-slate-500 font-medium">{user?.email}</p>
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -941,7 +1046,7 @@ export default function App() {
             </div>
             <button 
               onClick={() => setMultiSelectMode(!multiSelectMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${multiSelectMode ? 'bg-blue-600' : 'bg-slate-200'}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#1de5e2] focus:ring-offset-2 ${multiSelectMode ? 'bg-[#1de5e2]' : 'bg-slate-200'}`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${multiSelectMode ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
@@ -963,23 +1068,34 @@ export default function App() {
           >
             <HelpCircle size={20} />
           </button>
+          <button
+            onClick={signOut}
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 cursor-pointer"
+            title="Đăng xuất"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex w-full h-[calc(100vh-80px)]">
+      <main className="flex-1 flex overflow-hidden bg-white">
+        <div className="flex-1 flex min-w-0">
           {/* Left Panel: Graph Visualization */}
-          <div className="flex-1 border-r border-slate-200 relative bg-white graph-container" ref={containerRef}>
+          <div 
+            className="flex-1 relative bg-[#f8fafc] graph-container overflow-hidden border-r border-slate-200" 
+            ref={containerRef}
+            style={{ minWidth: 0 }}
+          >
             <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md border border-slate-200 p-4 rounded-xl shadow-lg network-legend">
               <h3 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Chú giải</h3>
               <div className="flex flex-col gap-2.5 text-xs text-slate-600 font-medium">
-                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-purple-500 shadow-sm"></div> Shop của tôi</div>
-                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-blue-600 shadow-sm"></div> Đối thủ (Shop)</div>
-                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-orange-500 shadow-sm"></div> Sản phẩm</div>
-                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-red-500 shadow-sm"></div> Vùng</div>
+                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-[#1de5e2] shadow-sm"></div> Shop của tôi</div>
+                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-[#2d3748] shadow-sm"></div> Đối thủ (Shop)</div>
+                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-[#1de5e2] shadow-sm border border-slate-200"></div> Sản phẩm</div>
+                <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-[#0d9488] shadow-sm"></div> Vùng</div>
                 <div className="flex items-center gap-2.5 mt-1.5 pt-1.5 border-t border-slate-200">
-                  <div className="w-5 h-[2px] bg-blue-400"></div> Sells (dòng tiền 💰)
+                  <div className="w-5 h-[2px] bg-[#1de5e2]"></div> Sells (dòng tiền 💰)
                 </div>
                 <div className="flex items-center gap-2.5"><div className="w-5 h-[2px] bg-slate-300"></div> Located In</div>
                 <div className="flex items-center gap-2.5"><div className="w-5 h-[2px] bg-red-300 border-t-2 border-dashed"></div> Cạnh tranh</div>
@@ -987,7 +1103,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="w-full h-full cursor-crosshair absolute inset-0">
+            <div className="absolute inset-0 cursor-crosshair bg-[#f8fafc]">
               <ErrorBoundary>
                 <ForceGraph2D
                   ref={graphRef}
@@ -1006,14 +1122,14 @@ export default function App() {
                       const selId = selectedNodes[0].id;
                       const srcId = typeof link.source === 'object' ? link.source.id : link.source;
                       const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
-                      const isRelated = srcId === selId || tgtId === selId ||
+                      const isRelated = srcId === selId || tgtId === selId || 
                         (selectedNodes[0].type === 'shop' && graphData.products.some((p: any) => p.shopId === selId && (p.id === srcId || p.id === tgtId)));
                       if (!isRelated) return link.type === 'competes_with' ? 'rgba(203,213,225,0.1)' : 'rgba(148,163,184,0.12)';
                       if (link.type === 'competes_with') return 'rgba(239,68,68,0.7)';
-                      return 'rgba(249,115,22,0.8)';
+                      return 'rgba(29, 229, 226, 0.8)';
                     }
                     if (link.type === 'competes_with') return 'rgba(239,68,68,0.25)';
-                    if (link.type === 'sells') return 'rgba(59,130,246,0.35)';
+                    if (link.type === 'sells') return 'rgba(29, 229, 226, 0.35)';
                     return 'rgba(148,163,184,0.3)';
                   }}
                   linkWidth={(link: any) => {
@@ -1346,4 +1462,33 @@ export default function App() {
       />
     </div>
   );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+        <div className="text-center">
+          <Loader2 size={40} className="animate-spin mx-auto mb-4" style={{ color: '#30E9CD' }} />
+          <p className="text-slate-400 font-medium">Đang kiểm tra phiên đăng nhập...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <Dashboard />;
 }
