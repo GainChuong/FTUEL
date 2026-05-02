@@ -5,6 +5,12 @@ import './index.css';
 import { AuthProvider } from './lib/auth';
 
 window.addEventListener('error', (e) => {
+  if (
+    e.message === 'ResizeObserver loop limit exceeded' ||
+    e.message === 'ResizeObserver loop completed with undelivered notifications.'
+  ) {
+    return;
+  }
   console.error("GLOBAL ERROR:", e.error?.stack || e.message);
 });
 

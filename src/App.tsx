@@ -25,6 +25,7 @@ import ForceGraph2D from "react-force-graph-2d";
 import { generateGraphData } from "./graphData";
 import type { GraphMetrics, CrawledRow } from "./graphData";
 import staticRawData from './crawledData.json';
+import { runGNN, predictRevenueWithGNN, detectCannibalization, cosineSimilarity, type GNNResult } from "./lib/gnnEngine";
 import Chatbot from "./components/Chatbot";
 import { AuthProvider, useAuth } from "./lib/auth";
 import LoginPage from "./components/LoginPage";
@@ -229,7 +230,12 @@ function Dashboard() {
     shops: [],
     regions: [],
     metrics: { maxProductRevenue: 1, maxShopRevenue: 1, maxRegionRevenue: 1, maxPrice: 1, maxSold: 1 } as GraphMetrics,
+    gnnResult: null as GNNResult | null,
   });
+
+  // GNN State
+  const [gnnReady, setGnnReady] = useState(false);
+  const gnnResultRef = useRef<GNNResult | null>(null);
   const d3DataRef = useRef<{nodes: any[], links: any[]}>({ nodes: [], links: [] });
   const [selectedNodes, setSelectedNodes] = useState<any[]>([]);
   const [compType, setCompType] = useState<'product' | 'shop' | 'region'>('product');
@@ -500,9 +506,16 @@ function Dashboard() {
     const loadGraph = (rows: CrawledRow[]) => {
       const rawData = generateGraphData(rows);
       setGraphData(rawData);
-      setInitialData(JSON.parse(JSON.stringify(rawData)));
+      setInitialData(JSON.parse(JSON.stringify(rawData, (k, v) => v instanceof Float32Array ? Array.from(v) : v)));
       d3DataRef.current = { nodes: [...rawData.nodes], links: [...rawData.links] };
       setHasData(true);
+
+      // Store GNN result
+      if (rawData.gnnResult) {
+        gnnResultRef.current = rawData.gnnResult;
+        setGnnReady(true);
+        console.log('[App] GNN initialized with', rawData.gnnResult.gnnScores.size, 'node scores');
+      }
     };
 
     const loadData = async () => {
@@ -628,7 +641,7 @@ function Dashboard() {
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, [isSidebarOpen, graphData.nodes.length]); // Re-run when sidebar or data changes
+  }, [isSidebarOpen, graphData.nodes.length, dataLoading]); // Re-run when sidebar, data, or loading state changes
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -673,7 +686,7 @@ function Dashboard() {
       }
     }, 100);
     return () => clearTimeout(timer);
-  }, [graphData]);
+  }, [graphData, dataLoading, dimensions]);
 
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const label = node.name;
@@ -829,32 +842,45 @@ function Dashboard() {
     const primaryNode = selectedNodes[0];
     if (!primaryNode || primaryNode.type !== "product") return;
 
-    const isCheap = primaryNode.originalPrice <= 250000;
-    const isPremium = primaryNode.originalPrice >= 1000000;
+    // Use GNN-powered prediction if available
+    const gnn = gnnResultRef.current;
+    let newSold: number, newRevenue: number, gnnExplanation = '';
 
-    let priceElasticity = 1.5;
-    let discountBoostMult = 2.0;
+    if (gnn && gnn.embeddings.size > 0) {
+      // GNN-powered simulation
+      const prediction = predictRevenueWithGNN(
+        primaryNode, priceChange, discountChange,
+        marketCondition, gnn.embeddings, gnn.competitionScores,
+        graphData.products
+      );
+      newSold = prediction.sold;
+      newRevenue = prediction.revenue;
+      gnnExplanation = prediction.explanation;
+    } else {
+      // Fallback: original elasticity-based calculation
+      let priceElasticity = 1.5;
+      let discountBoostMult = 2.0;
+      if (marketCondition === 'recession') { priceElasticity = 2.5; discountBoostMult = 3.0; }
+      else if (marketCondition === 'growth') { priceElasticity = 0.5; discountBoostMult = 1.2; }
 
-    if (marketCondition === 'recession') {
-      priceElasticity = 2.5; // Nhạy cảm về giá cực cao
-      discountBoostMult = 3.0; // KM kích cầu mạnh
-    } else if (marketCondition === 'growth') {
-      priceElasticity = 0.5; // Ít nhạy cảm về giá (inflation-plus)
-      discountBoostMult = 1.2; // KM không kích cầu bùng nổ bằng
+      const newDiscount = Math.min(0.7, Math.max(0, primaryNode.originalDiscount + discountChange / 100));
+      const newPrice = Math.max(1000, primaryNode.originalPrice * (1 + priceChange / 100));
+      const priceEffect = Math.max(0.1, 1 - (priceChange / 100) * priceElasticity);
+      const discountEffect = 1 + (newDiscount - primaryNode.originalDiscount) * discountBoostMult;
+      newSold = Math.max(0, Math.floor(primaryNode.originalSold * priceEffect * discountEffect));
+      const actualPrice = newPrice * (1 - newDiscount);
+      newRevenue = actualPrice * newSold;
     }
 
     const newDiscount = Math.min(0.7, Math.max(0, primaryNode.originalDiscount + discountChange / 100));
     const newPrice = Math.max(1000, primaryNode.originalPrice * (1 + priceChange / 100));
 
-    // Hiệu ứng ăn thịt đồng loại (Cannibalization) & Cạnh tranh
-    const priceEffect = Math.max(0.1, 1 - (priceChange / 100) * priceElasticity);
-    const discountEffect = 1 + (newDiscount - primaryNode.originalDiscount) * discountBoostMult;
-
-    const newSold = Math.max(0, Math.floor(primaryNode.originalSold * priceEffect * discountEffect));
-    const actualPrice = newPrice * (1 - newDiscount);
-    const newRevenue = actualPrice * newSold;
-
-    const newData = JSON.parse(JSON.stringify(graphData, (k, v) => (k === 'source' || k === 'target') && v?.id ? v.id : v));
+    const newData = JSON.parse(JSON.stringify(graphData, (k, v) => {
+      if (v instanceof Float32Array) return Array.from(v);
+      if ((k === 'source' || k === 'target') && v?.id) return v.id;
+      if (k === 'gnnResult' || k === 'embedding') return undefined;
+      return v;
+    }));
     
     newData.products.forEach((p: any) => {
       if (p.id === primaryNode.id) {
@@ -865,7 +891,6 @@ function Dashboard() {
         p.vx = (Math.random() - 0.5) * 200;
         p.vy = (Math.random() - 0.5) * 200;
       } else {
-        // Nếu sp chính giảm giá/tăng KM, đối thủ cùng vùng bị hút khách
         const isCompetitor = p.regionId === primaryNode.regionId && p.shopId !== primaryNode.shopId;
         if (isCompetitor && (priceChange < 0 || discountChange > 0)) {
            p.sold = Math.max(0, Math.floor(p.sold * 0.98));
@@ -888,7 +913,8 @@ function Dashboard() {
     saveScenarioByName(`KM ${primaryNode.name.substring(0,20)}: ${(newDiscount*100).toFixed(0)}%`, myShop?.totalRevenue);
 
     if (discountChange !== 0 || priceChange !== 0) {
-      setXaiMessage(`Bối cảnh ${marketCondition.toUpperCase()}: Điều chỉnh giá ${priceChange}% và KM ${discountChange}%. Lượng bán: ${newSold.toLocaleString()}. Doanh thu: ₫${fmtVND(Math.floor(newRevenue))}.`);
+      const gnnTag = gnn ? ' [GNN-Enhanced]' : '';
+      setXaiMessage(`${gnnTag} Bối cảnh ${marketCondition.toUpperCase()}: Giá ${priceChange}% | KM ${discountChange}%. Lượng bán: ${newSold.toLocaleString()}. DT: ₫${fmtVND(Math.floor(newRevenue))}.${gnnExplanation ? '\n' + gnnExplanation : ''}`);
     } else {
       setXaiMessage(`Không thay đổi giá trị. Doanh thu giữ nguyên.`);
     }
@@ -1370,7 +1396,7 @@ function Dashboard() {
                       return 1;
                     }}
                     linkLineDash={(link: any) => link.type === 'competes_with' ? [4, 4] : []}
-                    linkDirectionalParticles={(link: any) => link.type === 'sells' ? 3 : 0}
+                    linkDirectionalParticles={(link: any) => link.type === 'sells' ? 1 : 0}
                     linkDirectionalParticleWidth={(link: any) => {
                       const prodId = typeof link.target === 'object' ? link.target.id : link.target;
                       const prod = graphData.products.find((p: any) => p.id === prodId);
@@ -1584,6 +1610,63 @@ function Dashboard() {
                       </div>
                       </div>
 
+                      {/* GNN Intelligence Panel */}
+                      {gnnReady && selectedNodes[0].type === 'product' && (() => {
+                        const gnn = gnnResultRef.current;
+                        const nodeId = selectedNodes[0].id;
+                        const competitors = gnn?.competitionScores.get(nodeId) || [];
+                        const gnnScore = gnn?.gnnScores.get(nodeId) || 0;
+                        const myShopProducts = graphData.products.filter((p: any) => p.shopId === selectedNodes[0].shopId);
+                        const cannibalized = gnn ? detectCannibalization(myShopProducts, gnn.embeddings, 0.8).filter(c => c.productA === nodeId || c.productB === nodeId) : [];
+                        return (
+                          <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden shrink-0 mx-4 mb-2">
+                            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-2.5 border-b border-indigo-100 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><BrainCircuit size={12} /></div>
+                                <h4 className="font-bold text-slate-800 text-xs">GNN Intelligence</h4>
+                              </div>
+                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Score: {gnnScore}/100</span>
+                            </div>
+                            <div className="p-3 space-y-2">
+                              {/* Competition Radar */}
+                              {competitors.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">🎯 Đối thủ cạnh tranh (GNN)</p>
+                                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                                    {competitors.slice(0, 5).map((comp: any, idx: number) => {
+                                      const compProduct = graphData.products.find((p: any) => p.id === comp.targetId);
+                                      return (
+                                        <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 px-2 py-1 rounded">
+                                          <span className="text-slate-700 truncate max-w-[180px]">{compProduct?.name || comp.targetId}</span>
+                                          <span className={`font-mono font-bold ${comp.score >= 0.85 ? 'text-red-600' : comp.score >= 0.75 ? 'text-orange-500' : 'text-yellow-600'}`}>
+                                            {(comp.score * 100).toFixed(0)}%
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {/* Cannibalization Alert */}
+                              {cannibalized.length > 0 && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-lg p-2">
+                                  <p className="text-[10px] font-bold text-rose-600 uppercase flex items-center gap-1"><AlertTriangle size={10} /> Cảnh báo Cannibalization</p>
+                                  {cannibalized.slice(0, 3).map((c: any, idx: number) => {
+                                    const otherP = graphData.products.find((p: any) => p.id === (c.productA === nodeId ? c.productB : c.productA));
+                                    return (
+                                      <p key={idx} className="text-[10px] text-rose-700 mt-0.5">→ {otherP?.name} ({(c.similarity * 100).toFixed(0)}% giống)</p>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {competitors.length === 0 && cannibalized.length === 0 && (
+                                <p className="text-[10px] text-slate-400 text-center py-2">Sản phẩm có vị thế cạnh tranh tốt ✅</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Simulation & XAI Panel for Single Product */}
                       <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
                         <div className="bg-blue-50 p-2.5 border-b border-blue-100 flex items-start gap-2 shrink-0">
@@ -1591,7 +1674,7 @@ function Dashboard() {
                             <Activity size={12} />
                           </div>
                           <div>
-                            <h4 className="font-bold text-slate-800 text-xs">Phân tích Nhu cầu</h4>
+                            <h4 className="font-bold text-slate-800 text-xs">Phân tích Nhu cầu {gnnReady && <span className="text-indigo-500 ml-1">[GNN]</span>}</h4>
                             <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Điều chỉnh KM để dự báo doanh thu.</p>
                           </div>
                         </div>

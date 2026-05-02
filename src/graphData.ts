@@ -1,4 +1,5 @@
 import staticRawData from './crawledData.json';
+import { runGNN, cosineSimilarity, detectCannibalization, type GNNResult } from './lib/gnnEngine';
 
 export interface CrawledRow {
   shop: string;
@@ -24,6 +25,8 @@ export interface ProductNode {
   discount: number;
   originalDiscount: number;
   revenue: number;
+  gnnScore?: number;
+  embedding?: Float32Array;
 }
 
 export interface ShopNode {
@@ -35,6 +38,7 @@ export interface ShopNode {
   productCount: number;
   totalRevenue: number;
   avgPrice: number;
+  gnnScore?: number;
 }
 
 export interface RegionNode {
@@ -44,12 +48,14 @@ export interface RegionNode {
   shopCount: number;
   productCount: number;
   totalRevenue: number;
+  gnnScore?: number;
 }
 
 export interface GraphLink {
   source: string;
   target: string;
   type: 'sells' | 'located_in' | 'competes_with';
+  competitionStrength?: number;
 }
 
 export interface GraphMetrics {
@@ -179,37 +185,6 @@ export function generateGraphData(data?: CrawledRow[]) {
     });
   });
 
-  // --- Pass 4: Competition links ---
-  // Products from DIFFERENT shops compete if their prices are within 50% of each other
-  // We limit this to avoid too many links (sample top products per shop)
-  const topProductsPerShop = new Map<string, ProductNode[]>();
-  products.forEach((p) => {
-    if (!topProductsPerShop.has(p.shopId)) topProductsPerShop.set(p.shopId, []);
-    topProductsPerShop.get(p.shopId)!.push(p);
-  });
-  // Keep top 10 by revenue per shop for competition links
-  topProductsPerShop.forEach((prods, shopId) => {
-    prods.sort((a, b) => b.revenue - a.revenue);
-    topProductsPerShop.set(shopId, prods.slice(0, 10));
-  });
-
-  const shopIds = [...topProductsPerShop.keys()];
-  for (let i = 0; i < shopIds.length; i++) {
-    for (let j = i + 1; j < shopIds.length; j++) {
-      const prodsA = topProductsPerShop.get(shopIds[i])!;
-      const prodsB = topProductsPerShop.get(shopIds[j])!;
-      for (const a of prodsA) {
-        for (const b of prodsB) {
-          const priceDiff = Math.abs(a.price - b.price);
-          const avgPrice = (a.price + b.price) / 2;
-          if (avgPrice > 0 && priceDiff / avgPrice < 0.5) {
-            links.push({ source: a.id, target: b.id, type: 'competes_with' });
-          }
-        }
-      }
-    }
-  }
-
   // --- Compute metrics ---
   const metrics: GraphMetrics = {
     maxProductRevenue: Math.max(...products.map((p) => p.revenue), 1),
@@ -219,7 +194,85 @@ export function generateGraphData(data?: CrawledRow[]) {
     maxSold: Math.max(...products.map((p) => p.sold), 1),
   };
 
+  // --- Pass 4: GNN-Powered Competition Detection ---
+  const allNodes = [...regions, ...shops, ...products];
+  // Structural links (sells + located_in) for GNN context
+  const structuralLinks = links.map(l => ({
+    source: l.source,
+    target: l.target,
+    type: l.type
+  }));
+
+  let gnnResult: GNNResult | null = null;
+  try {
+    gnnResult = runGNN(allNodes, structuralLinks, metrics);
+
+    // Attach GNN scores and embeddings to nodes
+    for (const p of products) {
+      p.gnnScore = gnnResult.gnnScores.get(p.id) || 0;
+      p.embedding = gnnResult.embeddings.get(p.id);
+    }
+    for (const s of shops) {
+      s.gnnScore = gnnResult.gnnScores.get(s.id) || 0;
+    }
+    for (const r of regions) {
+      r.gnnScore = gnnResult.gnnScores.get(r.id) || 0;
+    }
+
+    // Create competition links from GNN cosine similarity (replaces old price-based logic)
+    for (const [productId, competitors] of gnnResult.competitionScores) {
+      for (const comp of competitors) {
+        links.push({
+          source: productId,
+          target: comp.targetId,
+          type: 'competes_with',
+          competitionStrength: comp.score
+        });
+      }
+    }
+
+    console.log(`[GraphData] GNN competition links: ${gnnResult.competitionScores.size} products analyzed`);
+  } catch (err) {
+    console.warn('[GraphData] GNN failed, falling back to rule-based competition:', err);
+
+    // Fallback: old rule-based competition detection
+    const topProductsPerShop = new Map<string, ProductNode[]>();
+    products.forEach((p) => {
+      if (!topProductsPerShop.has(p.shopId)) topProductsPerShop.set(p.shopId, []);
+      topProductsPerShop.get(p.shopId)!.push(p);
+    });
+    topProductsPerShop.forEach((prods, shopId) => {
+      prods.sort((a, b) => b.revenue - a.revenue);
+      topProductsPerShop.set(shopId, prods.slice(0, 10));
+    });
+
+    const shopIds = [...topProductsPerShop.keys()];
+    for (let i = 0; i < shopIds.length; i++) {
+      for (let j = i + 1; j < shopIds.length; j++) {
+        const prodsA = topProductsPerShop.get(shopIds[i])!;
+        const prodsB = topProductsPerShop.get(shopIds[j])!;
+        for (const a of prodsA) {
+          for (const b of prodsB) {
+            const priceDiff = Math.abs(a.price - b.price);
+            const avgPrice = (a.price + b.price) / 2;
+            if (avgPrice > 0 && priceDiff / avgPrice < 0.5) {
+              links.push({ source: a.id, target: b.id, type: 'competes_with' });
+            }
+          }
+        }
+      }
+    }
+  }
+
   const nodes = [...regions, ...shops, ...products];
 
-  return { nodes, links, products, shops, regions, metrics };
+  return {
+    nodes,
+    links,
+    products,
+    shops,
+    regions,
+    metrics,
+    gnnResult
+  };
 }
