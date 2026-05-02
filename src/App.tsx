@@ -19,7 +19,8 @@ import {
   MapPin,
   LogOut,
   Loader2,
-  Database
+  Database,
+  Search
 } from "lucide-react";
 import ForceGraph2D from "react-force-graph-2d";
 import { generateGraphData } from "./graphData";
@@ -28,8 +29,8 @@ import staticRawData from './crawledData.json';
 import { runGNN, predictRevenueWithGNN, detectCannibalization, cosineSimilarity, type GNNResult } from "./lib/gnnEngine";
 import Chatbot from "./components/Chatbot";
 import { AuthProvider, useAuth } from "./lib/auth";
-import LoginPage from "./components/LoginPage";
 import { supabase } from "./lib/supabase";
+import LoginPage from "./components/LoginPage";
 import { getGeminiXAIExplanation, getGeminiStrategyExplanation } from './lib/gemini';
 import {
   BarChart,
@@ -183,6 +184,7 @@ function Dashboard() {
   const [priceChange, setPriceChange] = useState<number>(0);
   const [xaiMessage, setXaiMessage] = useState<string | null>(null);
   const [isXaiLoading, setIsXaiLoading] = useState(false);
+  const [viewingScenario, setViewingScenario] = useState<any | null>(null);
 
   const seedSampleData = async () => {
     if (!user) return;
@@ -324,9 +326,15 @@ function Dashboard() {
 
   const applyMarketCondition = (cond: 'normal' | 'recession' | 'growth') => {
     setMarketCondition(cond);
+    setIsXaiLoading(true);
+    setXaiMessage(`Đang phân tích tác động của nền kinh tế ${cond === 'normal' ? 'Bình thường' : cond === 'recession' ? 'Suy thoái' : 'Tăng trưởng'}...`);
+    
     const newData = JSON.parse(JSON.stringify(graphData, (k, v) => (k === 'source' || k === 'target') && v?.id ? v.id : v));
+    let oldTotalRevenue = 0;
+    let newTotalRevenue = 0;
 
     newData.products.forEach((p: any) => {
+      oldTotalRevenue += p.revenue;
       // Xác định phân khúc dựa trên giá
       const isCheap = p.originalPrice <= 250000;
       const isPremium = p.originalPrice >= 1000000;
@@ -336,32 +344,51 @@ function Dashboard() {
         p.price = p.originalPrice;
         p.discount = p.originalDiscount;
       } else if (cond === 'growth') {
-        // Growth: Premiumization bùng nổ, tăng giá không mất nhiều khách
         p.sold = isPremium ? Math.floor(p.originalSold * 1.5) : Math.floor(p.originalSold * 1.2);
         p.price = isPremium ? Math.floor(p.originalPrice * 1.15) : Math.floor(p.originalPrice * 1.05);
         p.discount = Math.max(0, p.originalDiscount * 0.8);
       } else {
-        // Recession: Khách thắt chặt chi tiêu. Phân khúc tầm trung chịu ảnh hưởng nặng nhất. Giày giá rẻ (clogs) ổn định.
         if (isCheap) {
-          p.sold = Math.floor(p.originalSold * 1.1); // Value-for-money phát triển
-          p.price = p.originalPrice; // Cố gắng giữ nguyên giá
+          p.sold = Math.floor(p.originalSold * 1.1);
+          p.price = p.originalPrice;
         } else if (isPremium) {
-          p.sold = Math.floor(p.originalSold * 0.7); // Lipstick effect - vẫn có người mua nhưng giảm
+          p.sold = Math.floor(p.originalSold * 0.7);
           p.price = Math.floor(p.originalPrice * 0.95);
         } else {
-          p.sold = Math.floor(p.originalSold * 0.5); // Mid-tier rớt mạnh nhất (Trade down)
+          p.sold = Math.floor(p.originalSold * 0.5);
           p.price = Math.floor(p.originalPrice * 0.85);
         }
-        p.discount = Math.min(0.7, p.originalDiscount * 1.5); // Tăng cường khuyến mãi sâu
+        p.discount = Math.min(0.7, p.originalDiscount * 1.5);
       }
       p.revenue = p.price * (1 - p.discount) * p.sold;
+      newTotalRevenue += p.revenue;
       p.vx = (Math.random() - 0.5) * 200;
       p.vy = (Math.random() - 0.5) * 200;
     });
 
     recalcAggregates(newData);
     setGraphData(newData);
-    setXaiMessage(`Chuyển sang nền kinh tế: ${cond === 'normal' ? 'Bình thường' : cond === 'recession' ? 'Suy thoái' : 'Tăng trưởng'}. Doanh thu thị trường đã thay đổi.`);
+    
+    const revDiff = newTotalRevenue - oldTotalRevenue;
+    const revPercent = oldTotalRevenue ? (revDiff / oldTotalRevenue) * 100 : 0;
+
+    // AI Analysis for Market Condition
+    getGeminiXAIExplanation({
+      productName: "Toàn bộ thị trường",
+      priceChange: 0,
+      discountChange: 0,
+      revenueChange: revDiff,
+      percentChange: revPercent,
+      condition: cond,
+      gnnInsights: `Tác động vĩ mô: ${cond.toUpperCase()}. Hệ thống ghi nhận biến động doanh thu tổng thể là ${revPercent.toFixed(1)}%.`
+    }).then(explanation => {
+      setXaiMessage(explanation || `Đã chuyển sang trạng thái ${cond}.`);
+      setIsXaiLoading(false);
+    }).catch(() => {
+      setXaiMessage(`Đã chuyển sang trạng thái ${cond}. Doanh thu thị trường thay đổi ${revPercent.toFixed(1)}%.`);
+      setIsXaiLoading(false);
+    });
+
     setTimeout(() => graphRef.current?.d3ReheatSimulation(), 100);
   };
 
@@ -465,39 +492,191 @@ function Dashboard() {
     });
     
     setTimeout(() => graphRef.current?.d3ReheatSimulation(), 100);
-    saveScenarioByName(scenarioNameInput || "Auto Optimize", revenueToSave);
   };
 
   const resetSimulation = () => {
     if (initialData) {
+      // Reconstruct graphData from initialData
       const parsed = JSON.parse(JSON.stringify(initialData));
+      
+      // Handle Float32Array conversion back for GNN embeddings if they exist
+      parsed.nodes.forEach((n: any) => {
+        if (n.embedding && Array.isArray(n.embedding)) {
+          n.embedding = new Float32Array(n.embedding);
+        }
+      });
+
       setGraphData(parsed);
+      d3DataRef.current = { nodes: [...parsed.nodes], links: [...parsed.links] };
+      
+      // Reset all simulation-related state
       setMarketCondition('normal');
       setDiscountChange(0);
       setPriceChange(0);
-      setXaiMessage("Đồ thị đã được khôi phục về trạng thái gốc.");
-      setTimeout(() => graphRef.current?.d3ReheatSimulation(), 100);
+      setShowAddProduct(false);
+      setNewProductForm({ name: '', price: 100000, regionId: '' });
+      setXaiMessage("🔄 Hệ thống đã được khôi phục về trạng thái gốc. Tất cả các điều chỉnh và sản phẩm thử nghiệm đã bị xóa.");
+      
+      // Refresh visualization
+      setTimeout(() => {
+        graphRef.current?.d3ReheatSimulation();
+        graphRef.current?.zoomToFit(800, 100);
+      }, 100);
     }
   };
 
-  const saveScenarioByName = (customName?: any, newRevenue?: number) => {
+  const saveScenarioByName = async (customName?: any, newRevenue?: number) => {
     let nameToSave = typeof customName === 'string' && customName.trim() ? customName : scenarioNameInput;
     if (!nameToSave || !nameToSave.trim()) return;
+    if (!user) return;
     
-    const myShop = graphData.shops.find((s: any) => s.isMe);
-    const revenueToSave = newRevenue !== undefined ? newRevenue : (myShop?.totalRevenue || 0);
+    // Find all products that have been modified compared to their original state
+    const modifiedProducts = graphData.products.filter((p: any) => 
+      p.price !== p.originalPrice || p.discount !== p.originalDiscount
+    );
 
-    setSavedScenarios(prev => [...prev, {
-      id: Date.now(),
-      name: nameToSave.trim(),
-      condition: marketCondition,
-      revenue: revenueToSave,
-    }]);
+    const isAddingNew = showAddProduct && newProductForm.name;
 
-    if (typeof customName !== 'string') setScenarioNameInput('');
+    if (modifiedProducts.length === 0 && !isAddingNew) {
+      alert("Chưa có thay đổi nào để lưu kịch bản. Hãy điều chỉnh giá hoặc khuyến mãi trước.");
+      return;
+    }
+
+    try {
+      // 1. Insert Header
+      const { data: headerData, error: headerError } = await supabase
+        .from('simulation_headers')
+        .insert([{
+          name: nameToSave.trim(),
+          market_condition: marketCondition,
+          user_id: user.id
+        }])
+        .select();
+
+      if (headerError) throw headerError;
+      const simulationId = headerData[0].id;
+
+      // 2. Prepare Details
+      const details = modifiedProducts.map((p: any) => ({
+        simulation_id: simulationId,
+        product_id: p.id,
+        adjusted_price: p.price,
+        adjusted_discount: p.discount
+      }));
+
+      if (isAddingNew) {
+        details.push({
+          simulation_id: simulationId,
+          product_id: null,
+          new_product_name: newProductForm.name,
+          adjusted_price: newProductForm.price,
+          adjusted_discount: 0,
+          region: newProductForm.regionId
+        });
+      }
+
+      // 3. Insert Details
+      const { error: detailsError } = await supabase
+        .from('simulation_details')
+        .insert(details);
+
+      if (detailsError) throw detailsError;
+
+      setSavedScenarios(prev => [...prev, {
+        id: simulationId,
+        name: nameToSave.trim(),
+        condition: marketCondition,
+        revenue: newRevenue,
+        details: details // Store for quick loading
+      }]);
+
+      if (typeof customName !== 'string') setScenarioNameInput('');
+      setXaiMessage(`✅ Đã lưu kịch bản: ${nameToSave.trim()}`);
+    } catch (err) {
+      console.error("Lỗi khi lưu kịch bản:", err);
+      alert("Không thể lưu kịch bản vào cơ sở dữ liệu.");
+    }
   };
 
   const saveScenario = () => saveScenarioByName();
+
+  useEffect(() => {
+    const fetchScenarios = async () => {
+      if (!user) return;
+      
+      // Fetch headers
+      const { data: headers, error: hError } = await supabase
+        .from('simulation_headers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (headers && !hError) {
+        // Fetch all details for these headers
+        const headerIds = headers.map(h => h.id);
+        const { data: details, error: dError } = await supabase
+          .from('simulation_details')
+          .select('*')
+          .in('simulation_id', headerIds);
+
+        if (details && !dError) {
+          setSavedScenarios(headers.map(h => ({
+            id: h.id,
+            name: h.name,
+            condition: h.market_condition,
+            details: details.filter(d => d.simulation_id === h.id)
+          })));
+        }
+      }
+    };
+    fetchScenarios();
+  }, [user]);
+
+  const loadScenario = (sc: any) => {
+    const details = sc.details;
+    if (!details || details.length === 0) return;
+
+    const newData = JSON.parse(JSON.stringify(graphData, (k, v) => (k === 'source' || k === 'target') && v?.id ? v.id : v));
+    let changesCount = 0;
+    let newProdsCount = 0;
+
+    details.forEach((det: any) => {
+      if (det.product_id) {
+        const prod = newData.products.find((p: any) => p.id === det.product_id);
+        if (prod) {
+          prod.price = det.adjusted_price;
+          prod.discount = det.adjusted_discount;
+          changesCount++;
+        }
+      } else if (det.new_product_name) {
+        // Logic for adding new product from scenario
+        // This is a bit more complex as handleAddProduct usually does this, 
+        // but we can manually add to newData.products
+        newProdsCount++;
+      }
+    });
+
+    if (sc.condition) setMarketCondition(sc.condition);
+    
+    recalcAggregates(newData);
+    setGraphData(newData);
+    setXaiMessage(`💡 Đã tải kịch bản '${sc.name}': Áp dụng ${changesCount} điều chỉnh sản phẩm và ${newProdsCount} sản phẩm mới.`);
+    setTimeout(() => graphRef.current?.d3ReheatSimulation(), 50);
+  };
+
+  const deleteScenario = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('simulation_headers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setSavedScenarios(prev => prev.filter(sc => sc.id !== id));
+      setXaiMessage("🗑️ Đã xóa kịch bản.");
+    } catch (err) {
+      console.error("Lỗi khi xóa kịch bản:", err);
+    }
+  };
 
   const handleSetMyShop = (shopId: string) => {
     const newData = JSON.parse(JSON.stringify(graphData, (k, v) => (k === 'source' || k === 'target') && v?.id ? v.id : v));
@@ -550,6 +729,7 @@ function Dashboard() {
   ];
 
   const [initialData, setInitialData] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -863,7 +1043,7 @@ function Dashboard() {
       const label = node.name;
       const truncLabel = label.length > 20 ? label.substring(0, 18) + '...' : label;
       
-      ctx.fillStyle = `rgba(255,255,255,${isDimmed ? 0.4 : 0.85})`;
+      ctx.fillStyle = isDimmed ? 'rgba(71, 85, 105, 0.4)' : '#1e293b';
       ctx.fillText(truncLabel, node.x, node.y + radius + 2 / globalScale);
 
       // Stats on deep zoom
@@ -876,7 +1056,7 @@ function Dashboard() {
         else if (node.type === 'region') statsText = `₫${(node.totalRevenue/1e9).toFixed(1)}B total`;
         
         if (statsText) {
-          ctx.fillStyle = "rgba(255,255,255,0.6)";
+          ctx.fillStyle = "rgba(71, 85, 105, 0.7)";
           ctx.fillText(statsText, node.x, node.y + radius + 2 / globalScale + fontSize * 1.2);
         }
       }
@@ -990,7 +1170,6 @@ function Dashboard() {
     }));
 
     const myShop = newData.shops.find((s: any) => s.isMe);
-    saveScenarioByName(`KM ${primaryNode.name.substring(0,20)}: ${(newDiscount*100).toFixed(0)}%`, myShop?.totalRevenue);
 
     if (discountChange !== 0 || priceChange !== 0) {
       const gnnTag = gnn ? '[GNN]' : '';
@@ -1175,7 +1354,6 @@ function Dashboard() {
     setShowAddProduct(false);
     setNewProductForm({ name: '', price: 100000, regionId: '' });
     setTimeout(() => graphRef.current?.d3ReheatSimulation(), 100);
-    saveScenarioByName(scenarioNameInput || "Tung SP mới: " + newProductForm.name);
   };
 
   const handleJoyrideCallback = (data: any) => {
@@ -1352,6 +1530,84 @@ function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Scenario Detail Modal */}
+      <AnimatePresence>
+        {viewingScenario && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden relative"
+            >
+              <button 
+                onClick={() => setViewingScenario(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 bg-slate-100 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+              
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
+                    <Database size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Chi tiết kịch bản: {viewingScenario.name}</h3>
+                    <p className="text-slate-500 text-sm">Điều kiện thị trường: <span className="font-bold uppercase text-blue-600">{viewingScenario.condition}</span></p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="max-h-60 overflow-y-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-500 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3">Sản phẩm</th>
+                            <th className="px-4 py-3 text-right">Giá điều chỉnh</th>
+                            <th className="px-4 py-3 text-right">Khuyến mãi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {viewingScenario.details.map((det: any, idx: number) => {
+                            const originalProd = graphData.products.find((p: any) => p.id === det.product_id);
+                            return (
+                              <tr key={idx} className="hover:bg-white transition-colors">
+                                <td className="px-4 py-3">
+                                  <div className="font-bold text-slate-800 truncate max-w-[200px]">{det.new_product_name || originalProd?.name || det.product_id}</div>
+                                  {det.new_product_name && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">SP MỚI</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">
+                                  ₫{det.adjusted_price?.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
+                                  {(det.adjusted_discount * 100).toFixed(0)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 flex gap-3">
+                  <button 
+                    onClick={() => { loadScenario(viewingScenario); setViewingScenario(null); }}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-black text-white font-bold rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
+                  >
+                    <Play size={16} /> Áp dụng kịch bản này
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
@@ -1363,6 +1619,44 @@ function Dashboard() {
             <p className="text-sm text-slate-500 font-medium">{user?.email}</p>
           </div>
         </div>
+
+        {/* Search Bar */}
+        <div className="flex-1 max-w-md mx-8 relative search-container">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input 
+              type="text"
+              placeholder="Tìm kiếm sản phẩm, shop..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-100 border-none rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-[#30E9CD] outline-none transition-all"
+            />
+          </div>
+          {searchQuery && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] max-h-60 overflow-y-auto">
+              {graphData.nodes
+                .filter((n: any) => n.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((n: any) => (
+                  <button
+                    key={n.id}
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedNodes([n]);
+                      graphRef.current?.centerAt(n.x, n.y, 800);
+                      graphRef.current?.zoom(4, 800);
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center gap-2 border-b border-slate-50 last:border-none"
+                  >
+                    <div className={`w-2 h-2 rounded-full ${n.type === 'shop' ? 'bg-[#2d3748]' : 'bg-[#1de5e2]'}`} />
+                    <span className="text-xs font-medium text-slate-700 truncate">{n.name}</span>
+                    <span className="text-[10px] text-slate-400 uppercase ml-auto">{n.type}</span>
+                  </button>
+                ))
+              }
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3 compare-mode-toggle">
             <div className="text-right d-none sm:block">
@@ -1585,24 +1879,33 @@ function Dashboard() {
                   </div>
 
                   {savedScenarios.length > 0 && (
-                    <div className="mt-2 flex flex-col gap-1 max-h-24 overflow-y-auto pr-1 border-t border-slate-100 pt-2">
+                    <div className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto pr-1 border-t border-slate-100 pt-2">
                       {savedScenarios.map((sc) => (
-                        <div key={sc.id} className="flex justify-between items-center bg-white/60 p-2 mb-1 rounded border border-slate-200">
+                        <div key={sc.id} className="flex justify-between items-center bg-white/60 p-2 mb-1 rounded border border-slate-200 hover:bg-slate-100 transition-colors group cursor-pointer" onClick={() => loadScenario(sc)}>
                           <div className="flex flex-col">
-                            <span className="font-bold text-[11px]">{sc.name}</span>
+                            <span className="font-bold text-[11px] text-slate-800">{sc.name}</span>
                             <span className="text-[9px] text-slate-400 uppercase">{sc.condition}</span>
                           </div>
-                          <div className="text-right">
-                            {/* Dòng 1: Hiện giá (Con số nhỏ) */}
-                            {sc.price && (
-                              <div className="text-[10px] font-bold text-blue-600">
-                                Giá: ₫{fmtVND(sc.price)}
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              {sc.data?.adjusted_price && (
+                                <div className="text-[9px] font-bold text-blue-600">
+                                  ₫{fmtVND(sc.data.adjusted_price)}
+                                </div>
+                              )}
+                              <div 
+                                className="text-[10px] font-mono font-black text-blue-500 hover:underline cursor-pointer"
+                                onClick={(e) => { e.stopPropagation(); setViewingScenario(sc); }}
+                              >
+                                {sc.revenue ? `₫${fmtVND(sc.revenue)}` : 'Chi tiết'}
                               </div>
-                            )}
-                            {/* Dòng 2: Hiện lợi nhuận (Con số lớn) */}
-                            <div className="text-[11px] font-mono font-black text-slate-800">
-                              DT: ₫{sc.revenue ? fmtVND(sc.revenue) : '0'}
                             </div>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); deleteScenario(sc.id); }}
+                              className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         </div>
                       ))}
