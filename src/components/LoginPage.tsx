@@ -3,6 +3,29 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, UserPlus, LogIn, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 
+const LogoIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+  <div 
+    className={`flex items-center justify-center rounded-lg shadow-md ${className} shrink-0`} 
+    style={{ 
+      width: size, 
+      height: size,
+      padding: size * 0.16,
+      background: 'linear-gradient(135deg, #30E9CD, #20c4ab)' 
+    }}
+  >
+    <div className="relative w-full h-full flex flex-wrap gap-[10%]">
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full shadow-sm" 
+        style={{ width: '28%', height: '28%' }}
+      />
+    </div>
+  </div>
+);
+
 export default function LoginPage() {
   const { signIn, signUp } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
@@ -156,16 +179,8 @@ export default function LoginPage() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="text-center mb-6"
           >
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-3 shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #30E9CD 0%, #20c4ab 100%)' }}
-            >
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
-                <rect x="3" y="3" width="7" height="7" rx="1.5" fill="rgba(255,255,255,0.7)" />
-                <rect x="14" y="3" width="7" height="7" rx="1.5" fill="rgba(255,255,255,0.7)" />
-                <rect x="3" y="14" width="7" height="7" rx="1.5" fill="rgba(255,255,255,0.7)" />
-                <rect x="14" y="14" width="7" height="7" rx="1.5" fill="rgba(255,255,255,0.7)" />
-                <circle cx="10" cy="14" r="2" fill="white" />
-              </svg>
+            <div className="inline-flex items-center justify-center mb-4">
+              <LogoIcon size={64} className="!rounded-2xl" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">
               GraphRetail <span style={{ color: '#30E9CD' }}>AI</span>

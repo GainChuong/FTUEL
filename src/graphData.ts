@@ -1,6 +1,42 @@
 import staticRawData from './crawledData.json';
 import { runGNN, cosineSimilarity, detectCannibalization, type GNNResult } from './lib/gnnEngine';
 
+// Normalize region names to prevent duplicate nodes for the same location
+function normalizeRegion(raw: string): string {
+  if (!raw) return '';
+
+  // Replace non-breaking spaces (U+00A0) and other Unicode whitespace
+  let cleaned = raw.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ');
+
+  // Trim and collapse multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // Strip common prefixes
+  cleaned = cleaned.replace(/^(Thành phố|Tp\.|TP\.|tp\.)\s*/i, '').trim();
+  cleaned = cleaned.replace(/^(Tỉnh)\s*/i, '').trim();
+
+  // Map to canonical names
+  const lower = cleaned.toLowerCase();
+
+  if (lower.includes('hồ chí minh') || lower.includes('hcm') || lower === 'sài gòn' || lower === 'saigon') {
+    return 'TP. Hồ Chí Minh';
+  }
+  if (lower.includes('hà nội') || lower === 'ha noi' || lower === 'hanoi') {
+    return 'Hà Nội';
+  }
+  if (lower.includes('đà nẵng') || lower === 'da nang' || lower === 'danang') {
+    return 'Đà Nẵng';
+  }
+  if (lower.includes('hải phòng') || lower === 'hai phong') {
+    return 'Hải Phòng';
+  }
+  if (lower.includes('cần thơ') || lower === 'can tho') {
+    return 'Cần Thơ';
+  }
+
+  return cleaned;
+}
+
 export interface CrawledRow {
   shop: string;
   name: string;
@@ -82,17 +118,7 @@ export function generateGraphData(data?: CrawledRow[]) {
   // --- Pass 1: Create products and collect shop/region info ---
   rawData.forEach((row: any, i: number) => {
     const shopName = (row.shop || '').trim();
-    let regionName = (row.region || '').trim();
-
-    // Normalize popular regions to prevent duplicates (TP. HCM, Hà Nội, etc.)
-    const lowerRegion = regionName.toLowerCase();
-    if (lowerRegion.includes('hồ chí minh') || lowerRegion.includes('hcm')) {
-      regionName = 'TP. Hồ Chí Minh';
-    } else if (lowerRegion.includes('hà nội')) {
-      regionName = 'Hà Nội';
-    } else if (lowerRegion.includes('đà nẵng')) {
-      regionName = 'Đà Nẵng';
-    }
+    let regionName = normalizeRegion((row.region || ''));
 
     if (!shopName || !regionName) return;
 

@@ -45,6 +45,30 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+// --- BRAND GUIDELINES LOGO ---
+const LogoIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
+  <div 
+    className={`flex items-center justify-center rounded-lg shadow-md ${className} shrink-0`} 
+    style={{ 
+      width: size, 
+      height: size,
+      padding: size * 0.16,
+      background: 'linear-gradient(135deg, #30E9CD, #20c4ab)' 
+    }}
+  >
+    <div className="relative w-full h-full flex flex-wrap gap-[10%]">
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div className="w-[45%] h-[45%] bg-white/40 rounded-[20%]" />
+      <div 
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full shadow-sm" 
+        style={{ width: '28%', height: '28%' }}
+      />
+    </div>
+  </div>
+);
+
 // Define SVG Paths for our icons based on Lucide
 const svgPaths = {
   shop: '<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h2V14h8v8h2a2 2 0 0 0 2-2v-8"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/>',
@@ -118,9 +142,7 @@ function LoadingScreen({ progress }: { progress: number }) {
             transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
             className="p-4 rounded-3xl border-2 border-dashed border-[#30E9CD]/30"
           >
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#30E9CD] to-[#20c4ab] shadow-[0_0_40px_rgba(48,233,205,0.3)]">
-              <Network size={48} className="text-[#0f172a]" />
-            </div>
+            <LogoIcon size={80} className="!rounded-2xl" />
           </motion.div>
           <motion.div
             animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }}
@@ -131,7 +153,7 @@ function LoadingScreen({ progress }: { progress: number }) {
 
         <div className="text-center">
           <h1 className="text-4xl font-black text-white tracking-tighter mb-2">
-            GraphRetail <span className="text-[#30E9CD]">AI</span>
+            GraphRetail <span style={{ color: '#30E9CD' }}>AI</span>
           </h1>
           <p className="text-slate-400 font-medium tracking-[0.3em] uppercase text-[10px]">Architecting Retail Intelligence</p>
         </div>
@@ -175,7 +197,7 @@ function Dashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [hasData, setHasData] = useState(true);
   const [isDataEmpty, setIsDataEmpty] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [runTour, setRunTour] = useState(false);
   const [tourKey, setTourKey] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -189,41 +211,15 @@ function Dashboard() {
   const [isXaiLoading, setIsXaiLoading] = useState(false);
   const [viewingScenario, setViewingScenario] = useState<any | null>(null);
 
-  const importSampleData = async () => {
-    if (!user || isImporting) return;
-    setIsImporting(true);
-    try {
-      const sampleRecords = [
-        { "Tên Shop": "nesty ", "Tên sản phẩm": "[Tặng Sticker] Dép Sục Gia Đình Nesty Chất Liệu Eva Siêu Nhẹ, Không Mùi, Đế Thấp 3 cm NE50", "Rating": "4.94", "Giá": 125000, "Đã bán": 20000, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.3 },
-        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE75-Sản Phẩm Mới] Dép Sục Nesty Đúc Nguyên Khối Cao 6cm – Êm Nhẹ, Tôn Dáng, Chống Trơn, Hottrend Cá Tính", "Rating": 5, "Giá": 185000, "Đã bán": 154, "Vùng": "Tỉnh Đắk Lắk", "Khuyến mại": 0.47 },
-        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE01_Hỏa Tốc] Dép Sục Nam Nữ NESTY Kiểu Dáng Basic Đế Mềm Cao 4cm Tặng Kèm Charm", "Rating": 5, "Giá": 122245, "Đã bán": 41, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.36 },
-        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NEW] DÉP SỤC THIẾT KẾ KHÓA TĂNG GIẢM CHÍNH HÃNG NESTY MÃ NE29", "Rating": "4.88", "Giá": 165511, "Đã bán": 983, "Vùng": "Bình Dương", "Khuyến mại": 0.53 },
-        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE29] Dép Lười NESTY Chất Liệu EVA Cao Cấp – Đế 4cm Êm Chân, Khóa Cài", "Rating": "4.94", "Giá": 154800, "Đã bán": 421, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.23 }
-      ];
-
-      const toInsert = sampleRecords.map(r => ({
-        user_id: user.id,
-        shop_name: r["Tên Shop"].trim(),
-        name: r["Tên sản phẩm"],
-        rating: Number(r["Rating"]),
-        price: Number(r["Giá"]),
-        sold_count: Number(r["Đã bán"]),
-        region: r["Vùng"],
-        promotion: Number(r["Khuyến mại"]),
-        display_name: user.email?.split('@')[0] || 'User'
-      }));
-
-      const { error } = await supabase.from('products').insert(toInsert);
-      if (error) throw error;
-
-      window.location.reload(); 
-    } catch (err) {
-      console.error("Import failed:", err);
-      alert("Không thể nạp dữ liệu mẫu.");
-    } finally {
-      setIsImporting(false);
-    }
-  };
+  // Extension guide steps data
+  const extensionGuideSteps = [
+    { icon: '⚙️', title: 'Cài đặt Extension', desc: 'Mở chrome://extensions → Bật "Chế độ nhà phát triển" → Nhấn "Tải tiện ích đã giải nén" → Chọn thư mục chrome-extension/' },
+    { icon: '🔐', title: 'Đăng nhập', desc: 'Mở Extension popup → Nhập Email và Mật khẩu tài khoản GraphRetail AI → Nhấn Đăng nhập' },
+    { icon: '🌐', title: 'Mở trang Shopee', desc: 'Truy cập shopee.vn → Vào trang shop hoặc danh mục sản phẩm bạn muốn phân tích' },
+    { icon: '🕷️', title: 'Crawl dữ liệu', desc: 'Nhấn nút "▶ Bắt đầu Crawl" trong Extension → Đợi hệ thống tự động cuộn và thu thập sản phẩm' },
+    { icon: '☁️', title: 'Đẩy lên Supabase', desc: 'Sau khi crawl xong → Nhấn "⬆ Đẩy lên Supabase" → Dữ liệu sẽ được chuẩn hóa và lưu vào tài khoản của bạn' },
+    { icon: '🔄', title: 'Xem kết quả', desc: 'Quay lại trang GraphRetail AI → Nhấn nút 🔄 Làm mới dữ liệu → Đồ thị tri thức sẽ xuất hiện!' },
+  ];
 
   const [graphData, setGraphData] = useState<any>({
     nodes: [],
@@ -1684,11 +1680,9 @@ function Dashboard() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg shadow-md" style={{ background: 'linear-gradient(135deg, #30E9CD, #20c4ab)' }}>
-            <Network size={24} className="text-slate-900" />
-          </div>
+          <LogoIcon size={40} className="!rounded-xl" />
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">GraphRetail <span style={{ color: '#30E9CD' }}>AI</span></h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#334155]">GraphRetail <span style={{ color: '#30E9CD' }}>AI</span></h1>
             <p className="text-sm text-slate-500 font-medium">{user?.email}</p>
           </div>
         </div>
@@ -1789,29 +1783,59 @@ function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden bg-white">
         {isDataEmpty ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-white p-8 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="max-w-md"
+              className="max-w-2xl w-full"
             >
-              <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                <Database size={40} />
+              {/* Hero */}
+              <div className="text-center mb-10">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#30E9CD] to-[#20c4ab] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#30E9CD]/20">
+                  <Globe size={40} className="text-white" />
+                </div>
+                <h2 className="text-3xl font-black text-slate-800 mb-3 tracking-tight">Bắt đầu thu thập dữ liệu</h2>
+                <p className="text-slate-500 font-medium text-lg max-w-md mx-auto">
+                  Sử dụng Chrome Extension để crawl dữ liệu sản phẩm thực tế từ Shopee và phân tích bằng AI.
+                </p>
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">Chào mừng đến với GraphRetail AI</h2>
-              <p className="text-slate-600 mb-8 font-medium">
-                Tài khoản của bạn hiện chưa có dữ liệu. Hãy bắt đầu bằng cách nạp dữ liệu mẫu để khám phá các tính năng phân tích GNN.
-              </p>
-              <div className="flex flex-col gap-3">
+
+              {/* Steps Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                {extensionGuideSteps.map((step, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 * idx }}
+                    className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-[#30E9CD]/30 transition-all group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 bg-slate-100 group-hover:bg-[#30E9CD]/10 rounded-xl text-lg shrink-0 transition-colors">
+                        {step.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-black text-[#30E9CD] bg-[#30E9CD]/10 px-1.5 py-0.5 rounded">BƯỚC {idx + 1}</span>
+                          <h3 className="text-sm font-bold text-slate-800 truncate">{step.title}</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* CTA */}
+              <div className="text-center">
                 <button 
-                  onClick={importSampleData}
-                  disabled={isImporting}
-                  className="w-full py-4 bg-slate-800 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                  onClick={() => setRefreshTrigger(prev => prev + 1)}
+                  className="px-8 py-3.5 bg-slate-800 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mx-auto hover:scale-105 active:scale-95"
                 >
-                  {isImporting ? <Loader2 size={20} className="animate-spin" /> : <PlusCircle size={20} />}
-                  Nạp dữ liệu mẫu ngay
+                  <RotateCcw size={18} />
+                  Tôi đã đẩy dữ liệu — Làm mới ngay
                 </button>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Hoặc sử dụng Chrome Extension để crawl dữ liệu thật</p>
+                <p className="text-xs text-slate-400 mt-3 font-medium">Nhấn nút trên sau khi bạn đã crawl và đẩy dữ liệu từ Extension</p>
               </div>
             </motion.div>
           </div>
@@ -1919,19 +1943,18 @@ function Dashboard() {
                 ) : isDataEmpty ? (
                   <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-white/50 backdrop-blur-sm rounded-3xl border-2 border-dashed border-slate-200">
                     <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#30E9CD] to-[#20c4ab] flex items-center justify-center shadow-lg shadow-[#30E9CD]/20 mb-8">
-                      <Database size={48} className="text-white" />
+                      <Globe size={48} className="text-white" />
                     </div>
-                    <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Chào mừng đến với GraphRetail AI</h2>
-                    <p className="text-slate-500 max-w-md mb-8 text-lg font-medium leading-relaxed">
-                      Tài khoản của bạn hiện chưa có dữ liệu. Hãy bắt đầu bằng cách nạp dữ liệu mẫu để trải nghiệm sức mạnh của đồ thị tri thức và GNN.
+                    <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Bắt đầu thu thập dữ liệu</h2>
+                    <p className="text-slate-500 max-w-md mb-8 text-lg font-medium leading-relaxed text-center">
+                      Sử dụng Chrome Extension để crawl dữ liệu từ Shopee. Xem hướng dẫn chi tiết ở bên trái.
                     </p>
                     <button
-                      onClick={importSampleData}
-                      disabled={isImporting}
-                      className="px-8 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 disabled:opacity-50"
+                      onClick={() => setRefreshTrigger(prev => prev + 1)}
+                      className="px-8 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200"
                     >
-                      {isImporting ? <Loader2 size={20} className="animate-spin" /> : <PlusCircle size={20} />}
-                      {isImporting ? "Đang nạp dữ liệu..." : "Nạp dữ liệu mẫu ngay"}
+                      <RotateCcw size={20} />
+                      Làm mới dữ liệu
                     </button>
                   </div>
                 ) : (

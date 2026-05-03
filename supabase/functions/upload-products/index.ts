@@ -7,6 +7,55 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// ========================================
+// DATA NORMALIZATION: Region Name Cleaning
+// ========================================
+function normalizeRegion(raw: string): string {
+  if (!raw) return "Không xác định";
+
+  // Step 1: Replace non-breaking spaces (U+00A0) and other Unicode whitespace with normal space
+  let cleaned = raw.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ');
+
+  // Step 2: Trim and collapse multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // Step 3: Strip common prefixes
+  cleaned = cleaned.replace(/^(Thành phố|Tp\.|TP\.|tp\.)\s*/i, '').trim();
+  cleaned = cleaned.replace(/^(Tỉnh)\s*/i, '').trim();
+
+  // Step 4: Map to canonical names using keyword matching
+  const lower = cleaned.toLowerCase();
+
+  // Major cities
+  if (lower.includes('hồ chí minh') || lower.includes('hcm') || lower === 'sài gòn' || lower === 'saigon') {
+    return 'TP. Hồ Chí Minh';
+  }
+  if (lower.includes('hà nội') || lower === 'ha noi' || lower === 'hanoi') {
+    return 'Hà Nội';
+  }
+  if (lower.includes('đà nẵng') || lower === 'da nang' || lower === 'danang') {
+    return 'Đà Nẵng';
+  }
+  if (lower.includes('hải phòng') || lower === 'hai phong') {
+    return 'Hải Phòng';
+  }
+  if (lower.includes('cần thơ') || lower === 'can tho') {
+    return 'Cần Thơ';
+  }
+
+  // Return cleaned version (with prefix stripped)
+  return cleaned;
+}
+
+// ========================================
+// DATA NORMALIZATION: Shop Name Cleaning
+// ========================================
+function normalizeShopName(raw: string): string {
+  if (!raw) return "Unknown Shop";
+  // Replace NBSP, trim, collapse spaces
+  return raw.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -68,12 +117,12 @@ Deno.serve(async (req: Request) => {
       }
 
       return {
-        shop_name: p.shopName || p.shop_name || "Unknown Shop",
-        name: p.name || "Unnamed Product",
+        shop_name: normalizeShopName(p.shopName || p.shop_name || "Unknown Shop"),
+        name: (p.name || "Unnamed Product").replace(/[\u00A0]/g, ' ').trim(),
         rating: p.rating ? parseFloat(String(p.rating)) || null : null,
         price: cleanPrice,
         sold_count: parseInt(String(p.sold || p.sold_count || 0), 10) || 0,
-        region: p.region || null,
+        region: normalizeRegion(p.region || ""),
         promotion: cleanPromotion,
         user_id: user.id,
         display_name: displayName,
