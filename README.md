@@ -30,8 +30,8 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
    ```
 ---
 ### Cách 2: Truy cập nhanh (Khuyến nghị)
-Nếu chẳng may khi bấm vào link không phải màn hình đăng nhập, bạn có thể bấm nút đăng xuất ở góc bên phải trên cùng để đăng nhập tài khoản khác
-Không cần cài đặt, bạn có thể truy cập trực tiếp vào web app đã được triển khai:
+Nếu chẳng may khi bấm vào link không phải màn hình đăng nhập, bạn có thể bấm nút đăng xuất ở góc bên phải trên cùng để đăng nhập hoặc đăng ký tài khoản khác
+. Với cách này bạn không cần cài đặt, mà có thể truy cập trực tiếp vào web app đã được triển khai:
 👉 https://graph-retail-ai.vercel.app
 
 
