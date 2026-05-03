@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "GraphRetail Shopee Crawler",
+  "version": "2.0.0",
+  "description": "Crawl dữ liệu sản phẩm Shopee và đẩy trực tiếp lên GraphRetail AI",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://shopee.vn/*",
+    "https://fhbqanmmfgwrltmqrpcj.supabase.co/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GraphRetail Shopee Crawler"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://shopee.vn/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://shopee.vn/*"]
+    }
+  ]
+}

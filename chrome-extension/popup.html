@@ -1,40 +1,217 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Shopee Crawler</title>
+    <title>GraphRetail Crawler</title>
     <meta charset="utf-8">
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: Arial, sans-serif;
-            width: 250px;
-            padding: 15px;
-            text-align: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            width: 320px;
+            background: #0f172a;
+            color: #e2e8f0;
         }
-        button {
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(48, 233, 205, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-icon {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, #30E9CD, #20c4ab);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 900; color: #0f172a;
+        }
+        .header-text h3 { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+        .header-text p { font-size: 10px; color: #64748b; margin-top: 2px; }
+
+        /* Auth section */
+        .auth-section {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .auth-logged-in {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .user-info {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .user-avatar {
+            width: 28px; height: 28px;
+            background: linear-gradient(135deg, #30E9CD, #20c4ab);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #0f172a;
+        }
+        .user-email { font-size: 11px; color: #94a3b8; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+        .user-label { font-size: 10px; color: #30E9CD; font-weight: 600; }
+
+        /* Login form */
+        .login-form { display: flex; flex-direction: column; gap: 8px; }
+        .login-form input {
             width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            font-size: 14px;
-            font-weight: bold;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.06);
+            color: #e2e8f0;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
         }
-        #startBtn { background-color: #ee4d2d; color: white; }
-        #stopBtn { background-color: #555; color: white; }
-        #downloadBtn { background-color: #28a745; color: white; }
-        #clearBtn { background-color: #f8f9fa; color: #333; border: 1px solid #ddd; }
-        .status { margin-top: 10px; font-size: 12px; color: #666; }
+        .login-form input:focus { border-color: rgba(48, 233, 205, 0.5); }
+        .login-form input::placeholder { color: #475569; }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 6px; }
+        .btn {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #30E9CD, #20c4ab);
+            color: #0f172a;
+        }
+        .btn-shopee { background: #ee4d2d; color: white; }
+        .btn-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .btn-secondary { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); }
+        .btn-upload { background: linear-gradient(135deg, #30E9CD, #20c4ab); color: #0f172a; }
+        .btn-csv { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); }
+        .btn-logout { background: none; border: none; color: #64748b; font-size: 10px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .btn-logout:hover { color: #f87171; background: rgba(239,68,68,0.1); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Controls */
+        .controls {
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Status bar */
+        .status-bar {
+            padding: 10px 16px;
+            background: rgba(255,255,255,0.02);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-text { font-size: 10px; color: #64748b; }
+        .status-text.active { color: #30E9CD; }
+        .product-count {
+            font-size: 11px;
+            font-weight: 700;
+            color: #30E9CD;
+            background: rgba(48,233,205,0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Messages */
+        .message {
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            margin: 0 16px 8px;
+            display: none;
+        }
+        .message.error { display: block; background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+        .message.success { display: block; background: rgba(48,233,205,0.1); color: #30E9CD; border: 1px solid rgba(48,233,205,0.2); }
+
+        .hidden { display: none !important; }
+
+        /* Spinner */
+        .spinner {
+            width: 12px; height: 12px;
+            border: 2px solid rgba(15,23,42,0.3);
+            border-top-color: #0f172a;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <h3 style="color: #ee4d2d; margin-top: 0;">Shopee Crawler</h3>
-    <button id="startBtn">Bắt đầu Cuộn & Crawl</button>
-    <button id="stopBtn">Dừng lại</button>
-    <button id="downloadBtn">Tải File CSV</button>
-    <button id="clearBtn">Xóa dữ liệu (Reset)</button>
-    <div class="status" id="statusText">Trạng thái: Đang chờ...</div>
-    <div class="status" id="countText">Số sản phẩm: 0</div>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-icon">G</div>
+        <div class="header-text">
+            <h3>GraphRetail <span style="color: #30E9CD">Crawler</span></h3>
+            <p>Shopee Data Collection</p>
+        </div>
+    </div>
+
+    <!-- Auth Section -->
+    <div class="auth-section">
+        <!-- Login Form (shown when not logged in) -->
+        <div id="loginForm" class="login-form">
+            <input type="email" id="emailInput" placeholder="Email tài khoản GraphRetail">
+            <input type="password" id="passwordInput" placeholder="Mật khẩu">
+            <button class="btn btn-primary" id="loginBtn">Đăng nhập</button>
+        </div>
+
+        <!-- Logged-in State -->
+        <div id="loggedInState" class="auth-logged-in hidden">
+            <div class="user-info">
+                <div class="user-avatar" id="userAvatar">U</div>
+                <div>
+                    <div class="user-label">Đã kết nối</div>
+                    <div class="user-email" id="userEmail">user@example.com</div>
+                </div>
+            </div>
+            <button class="btn-logout" id="logoutBtn">Đăng xuất</button>
+        </div>
+    </div>
+
+    <!-- Message -->
+    <div class="message" id="messageBox"></div>
+
+    <!-- Crawl Controls -->
+    <div class="controls">
+        <div class="btn-row">
+            <button class="btn btn-shopee" id="startBtn">▶ Bắt đầu Crawl</button>
+            <button class="btn btn-danger" id="stopBtn">■ Dừng</button>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-upload" id="uploadBtn" disabled>⬆ Đẩy lên Supabase</button>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-csv" id="downloadBtn">📥 Tải CSV</button>
+            <button class="btn btn-secondary" id="clearBtn">🗑 Xóa dữ liệu</button>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span class="status-text" id="statusText">Đang chờ...</span>
+        <span class="product-count" id="countText">0 SP</span>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>

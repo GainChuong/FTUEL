@@ -483,7 +483,8 @@ async function startAutoScroll() {
     } else {
         console.log('Shopee Crawler: Không còn trang tiếp theo. Hoàn tất!');
         stopAutoScroll();
-        downloadCSV(); // Tự động tải file khi hoàn tất
+        // Notify popup that crawl is complete (popup will handle upload)
+        chrome.storage.local.set({ crawlComplete: true });
     }
 }
 

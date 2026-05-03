@@ -178,6 +178,7 @@ function Dashboard() {
   const [isImporting, setIsImporting] = useState(false);
   const [runTour, setRunTour] = useState(false);
   const [tourKey, setTourKey] = useState(0);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Custom Modals & Simulation
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -863,7 +864,7 @@ function Dashboard() {
       const tourTimer = setTimeout(() => setRunTour(true), 1000);
       return () => clearTimeout(tourTimer);
     }
-  }, [user?.id, supabase]);
+  }, [user?.id, supabase, refreshTrigger]);
 
   useEffect(() => {
     if (!d3DataRef.current.nodes.length && !graphData.nodes.length) return;
@@ -1642,6 +1643,14 @@ function Dashboard() {
           >
             <Activity size={20} className={!isSidebarOpen ? 'animate-pulse' : ''} />
           </button>
+          <button 
+            onClick={() => setRefreshTrigger(prev => prev + 1)}
+            className="p-2 text-slate-400 hover:text-[#30E9CD] hover:bg-[#30E9CD]/10 rounded-lg transition-colors border border-transparent hover:border-[#30E9CD]/20"
+            title="Làm mới dữ liệu từ Supabase"
+          >
+            <RotateCcw size={20} className={dataLoading ? 'animate-spin' : ''} />
+          </button>
+          <div className="w-px h-6 bg-slate-200 mx-1"></div>
           <button 
             onClick={() => setShowAddProduct(true)}
             className="add-product-btn flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg text-sm font-bold transition-colors border border-emerald-200"
