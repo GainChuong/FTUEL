@@ -62,6 +62,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
    - **Đường kẻ đỏ đứt đoạn**: Chỉ ra sự cạnh tranh trực tiếp giữa các sản phẩm (tương đồng về tính năng/giá).
    - **Liên kết**: Shop -> Vùng -> Sản phẩm.
 3. **AI Chatbot**: Sử dụng khung chat ở góc phải để hỏi về xu hướng thị trường, chiến lược giá hoặc yêu cầu so sánh đối thủ.
+   - **Lưu ý:** Hệ thống sử dụng mô hình AI miễn phí nên có **giới hạn số lượt chat mỗi phút/giờ**. Vui lòng hạn chế sử dụng dồn dập để tránh bị tạm khóa API.
 4. **Mô phỏng (Simulation)**:
    - Sử dụng thanh bên phải để thay đổi **Chu kỳ kinh tế** (Recession, Normal, Growth).
    - Điều chỉnh giá hoặc khuyến mãi của shop mình để xem dự báo thay đổi doanh thu và mức độ "ăn thịt" (Cannibalization) từ đối thủ.
