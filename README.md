@@ -52,6 +52,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 1. **Đăng nhập**: Mở Extension, nhập tài khoản GraphRetail AI của bạn.
    - **Lưu ý:** Nếu đã đăng nhập từ lâu, bạn nên **Đăng xuất và Đăng nhập lại** để làm mới phiên làm việc. Hãy chú ý kiểm tra đúng tài khoản đang hiển thị trong Extension trước khi nhấn Crawl.
 2. **Crawl**: Truy cập trang Shop hoặc danh mục sản phẩm trên Shopee. Nhấn **"▶ Bắt đầu Crawl"**. Extension sẽ tự động cuộn trang và thu thập thông tin sản phẩm.
+   - **Khuyến nghị:** Nên cào **dưới 200 dòng dữ liệu** mỗi lần để đảm bảo hiệu năng mượt mà nhất khi hiển thị đồ thị tri thức trên Dashboard (đặc biệt với các máy cấu hình thấp).
 3. **Upload**: Sau khi hoàn tất, nhấn **"⬆ Đẩy lên Supabase"**. Dữ liệu sẽ được tự động làm sạch và chuẩn hóa (Region, Shop Name) trước khi lưu vào database.
 
 ### Bước 2: Phân tích trên Dashboard
