@@ -35,6 +35,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 - **Đăng ký tài khoản mới:** 
   - Nếu muốn dùng tài khoản riêng (chưa có dữ liệu), hãy nhấn vào tab **Đăng ký**.
   - Sau khi đăng ký, bạn cần **kiểm tra email** để xác nhận tài khoản trước khi đăng nhập.
+  - **Lưu ý:** Hệ thống giới hạn đăng ký tối đa **3 tài khoản/giờ**.
 
 ### 4. Cài đặt Chrome Extension (Crawl Tool)
 1. Mở trình duyệt Chrome và truy cập đường dẫn: `chrome://extensions/`
@@ -49,6 +50,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 
 ### Bước 1: Thu thập dữ liệu (Crawl)
 1. **Đăng nhập**: Mở Extension, nhập tài khoản GraphRetail AI của bạn.
+   - **Lưu ý:** Nếu đã đăng nhập từ lâu, bạn nên **Đăng xuất và Đăng nhập lại** để làm mới phiên làm việc. Hãy chú ý kiểm tra đúng tài khoản đang hiển thị trong Extension trước khi nhấn Crawl.
 2. **Crawl**: Truy cập trang Shop hoặc danh mục sản phẩm trên Shopee. Nhấn **"▶ Bắt đầu Crawl"**. Extension sẽ tự động cuộn trang và thu thập thông tin sản phẩm.
 3. **Upload**: Sau khi hoàn tất, nhấn **"⬆ Đẩy lên Supabase"**. Dữ liệu sẽ được tự động làm sạch và chuẩn hóa (Region, Shop Name) trước khi lưu vào database.
 
