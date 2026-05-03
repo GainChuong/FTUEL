@@ -46,7 +46,11 @@ export default function LoginPage() {
     } else {
       const { error: authError } = await signUp(email, password);
       if (authError) {
-        setError(authError.message);
+        let customMessage = authError.message;
+        if (authError.message.includes('User already registered') || authError.status === 422) {
+          customMessage = 'Email này đã được đăng ký bởi một tài khoản khác.';
+        }
+        setError(customMessage);
       } else {
         setSuccess('Đăng ký thành công! Kiểm tra email để xác nhận tài khoản, hoặc đăng nhập ngay nếu không cần xác nhận.');
         setIsLogin(true);

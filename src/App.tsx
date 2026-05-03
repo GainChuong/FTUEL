@@ -174,6 +174,8 @@ function Dashboard() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [hasData, setHasData] = useState(true);
+  const [isDataEmpty, setIsDataEmpty] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [runTour, setRunTour] = useState(false);
   const [tourKey, setTourKey] = useState(0);
   
@@ -186,44 +188,39 @@ function Dashboard() {
   const [isXaiLoading, setIsXaiLoading] = useState(false);
   const [viewingScenario, setViewingScenario] = useState<any | null>(null);
 
-  const seedSampleData = async () => {
-    if (!user) return;
-    setDataLoading(true);
-    setLoadingProgress(10);
-    
+  const importSampleData = async () => {
+    if (!user || isImporting) return;
+    setIsImporting(true);
     try {
-      setLoadingProgress(30);
-      
-      // Use imported staticRawData directly
-      const staticData = staticRawData;
-      
-      // Take a representative sample to avoid overwhelming the request (max 500 rows)
-      const sample = staticData.slice(0, 500).map((r: any) => ({
+      const sampleRecords = [
+        { "Tên Shop": "nesty ", "Tên sản phẩm": "[Tặng Sticker] Dép Sục Gia Đình Nesty Chất Liệu Eva Siêu Nhẹ, Không Mùi, Đế Thấp 3 cm NE50", "Rating": "4.94", "Giá": 125000, "Đã bán": 20000, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.3 },
+        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE75-Sản Phẩm Mới] Dép Sục Nesty Đúc Nguyên Khối Cao 6cm – Êm Nhẹ, Tôn Dáng, Chống Trơn, Hottrend Cá Tính", "Rating": 5, "Giá": 185000, "Đã bán": 154, "Vùng": "Tỉnh Đắk Lắk", "Khuyến mại": 0.47 },
+        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE01_Hỏa Tốc] Dép Sục Nam Nữ NESTY Kiểu Dáng Basic Đế Mềm Cao 4cm Tặng Kèm Charm", "Rating": 5, "Giá": 122245, "Đã bán": 41, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.36 },
+        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NEW] DÉP SỤC THIẾT KẾ KHÓA TĂNG GIẢM CHÍNH HÃNG NESTY MÃ NE29", "Rating": "4.88", "Giá": 165511, "Đã bán": 983, "Vùng": "Bình Dương", "Khuyến mại": 0.53 },
+        { "Tên Shop": "nesty ", "Tên sản phẩm": "[NE29] Dép Lười NESTY Chất Liệu EVA Cao Cấp – Đế 4cm Êm Chân, Khóa Cài", "Rating": "4.94", "Giá": 154800, "Đã bán": 421, "Vùng": "TP. Hồ Chí Minh", "Khuyến mại": 0.23 }
+      ];
+
+      const toInsert = sampleRecords.map(r => ({
         user_id: user.id,
-        name: r.name,
-        price: r.price,
-        rating: r.rating,
-        sold_count: r.sold,
-        region: r.region,
-        promotion: r.discount,
-        shop_name: r.shop
+        shop_name: r["Tên Shop"].trim(),
+        name: r["Tên sản phẩm"],
+        rating: Number(r["Rating"]),
+        price: Number(r["Giá"]),
+        sold_count: Number(r["Đã bán"]),
+        region: r["Vùng"],
+        promotion: Number(r["Khuyến mại"]),
+        display_name: user.email?.split('@')[0] || 'User'
       }));
-      
-      setLoadingProgress(60);
-      
-      const { error } = await supabase.from('products').insert(sample);
+
+      const { error } = await supabase.from('products').insert(toInsert);
       if (error) throw error;
-      
-      setLoadingProgress(90);
-      console.log("App: Sample data seeded successfully for", user.id);
-      
-      // Trigger a reload of the actual data
-      window.location.reload();
+
+      window.location.reload(); 
     } catch (err) {
-      console.error("App: Seeding failed:", err);
-      alert("Không thể đồng bộ dữ liệu. Hãy đảm bảo bảng 'products' có đủ các cột: user_id, name, price, rating, sold_count, region, promotion, shop_name.");
+      console.error("Import failed:", err);
+      alert("Không thể nạp dữ liệu mẫu.");
     } finally {
-      setDataLoading(false);
+      setIsImporting(false);
     }
   };
 
@@ -839,22 +836,19 @@ function Dashboard() {
           console.log(`App: Found ${productsRes.data.length} actual records for ${user.id}`);
           loadGraph(mapRows(productsRes.data));
           setHasData(true);
+          setIsDataEmpty(false);
+          setDataLoading(false); // Stop loading after data is processed
         } else {
-          // No data found for this specific user ID - this is where we might have a matching issue
-          console.warn(`App: No data records found for user_id: ${user.id}. Falling back to sample data.`);
-          
-          // Double check if there's any data at all (for debugging)
-          const { count } = await supabase.from('products').select('*', { count: 'exact', head: true });
-          console.log(`App: Total records in 'products' table: ${count}`);
-          
-          loadGraph([]); // Fallback to sample data
-          setHasData(true); 
+          // No data found for this specific user ID
+          console.warn(`App: No data records found for user_id: ${user.id}.`);
+          setIsDataEmpty(true);
+          setHasData(false);
+          setDataLoading(false); // Stop loading so we can show Empty State
         }
       } catch (err) {
         console.error('App: Critical data loading error:', err);
-        // Even on error, we might want to show sample data instead of a blank screen
-        loadGraph([]);
-        setHasData(true);
+        setDataLoading(false);
+        setIsDataEmpty(true);
       } finally {
         // Ensure progress reaches 100%
         setLoadingProgress(100);
@@ -1388,37 +1382,7 @@ function Dashboard() {
     return <LoadingScreen progress={loadingProgress} />;
   }
 
-  if (!hasData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)' }}>
-        <div className="text-center max-w-md mx-4">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(29, 229, 226, 0.1)' }}>
-            <Database size={36} style={{ color: '#1de5e2' }} />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-3">Chưa có dữ liệu</h2>
-          <p className="text-slate-400 mb-6 leading-relaxed">
-            Tài khoản của bạn chưa có dữ liệu crawl. Hãy sử dụng Extension trình duyệt để crawl dữ liệu, hoặc đồng bộ dữ liệu mẫu để trải nghiệm dashboard ngay.
-          </p>
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={seedSampleData}
-              className="w-full px-6 py-3 bg-[#1de5e2] hover:bg-[#1de5e2]/90 text-[#0f172a] font-bold rounded-xl transition-all shadow-lg shadow-[#1de5e2]/20"
-            >
-              <Database size={18} className="inline mr-2" />
-              Đồng bộ dữ liệu mẫu
-            </button>
-            <button
-              onClick={signOut}
-              className="w-full px-6 py-3 rounded-xl text-sm font-semibold text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-            >
-              <LogOut size={14} className="inline mr-2" />
-              Đăng xuất
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="h-screen bg-slate-50 text-slate-900 font-sans flex flex-col overflow-hidden">
@@ -1707,7 +1671,35 @@ function Dashboard() {
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden bg-white">
-        <div className="flex-1 flex min-w-0">
+        {isDataEmpty ? (
+          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-8 text-center">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-md"
+            >
+              <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                <Database size={40} />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-4">Chào mừng đến với GraphRetail AI</h2>
+              <p className="text-slate-600 mb-8 font-medium">
+                Tài khoản của bạn hiện chưa có dữ liệu. Hãy bắt đầu bằng cách nạp dữ liệu mẫu để khám phá các tính năng phân tích GNN.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={importSampleData}
+                  disabled={isImporting}
+                  className="w-full py-4 bg-slate-800 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isImporting ? <Loader2 size={20} className="animate-spin" /> : <PlusCircle size={20} />}
+                  Nạp dữ liệu mẫu ngay
+                </button>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Hoặc sử dụng Chrome Extension để crawl dữ liệu thật</p>
+              </div>
+            </motion.div>
+          </div>
+        ) : (
+          <div className="flex-1 flex min-w-0">
           {/* Left Panel: Graph Visualization */}
           <div 
             className="flex-1 relative bg-[#f8fafc] graph-container overflow-hidden border-r border-slate-200" 
@@ -1807,9 +1799,27 @@ function Dashboard() {
                     cooldownTicks={100}
                     cooldownTime={3000}
                   />
+                ) : isDataEmpty ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-12 bg-white/50 backdrop-blur-sm rounded-3xl border-2 border-dashed border-slate-200">
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#30E9CD] to-[#20c4ab] flex items-center justify-center shadow-lg shadow-[#30E9CD]/20 mb-8">
+                      <Database size={48} className="text-white" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Chào mừng đến với GraphRetail AI</h2>
+                    <p className="text-slate-500 max-w-md mb-8 text-lg font-medium leading-relaxed">
+                      Tài khoản của bạn hiện chưa có dữ liệu. Hãy bắt đầu bằng cách nạp dữ liệu mẫu để trải nghiệm sức mạnh của đồ thị tri thức và GNN.
+                    </p>
+                    <button
+                      onClick={importSampleData}
+                      disabled={isImporting}
+                      className="px-8 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200 disabled:opacity-50"
+                    >
+                      {isImporting ? <Loader2 size={20} className="animate-spin" /> : <PlusCircle size={20} />}
+                      {isImporting ? "Đang nạp dữ liệu..." : "Nạp dữ liệu mẫu ngay"}
+                    </button>
+                  </div>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-400 font-medium">
-                    <Loader2 className="animate-spin mr-2" size={20} /> Calculating Viewport...
+                    <Loader2 className="animate-spin mr-2" size={20} /> Initializing AI Intelligence...
                   </div>
                 )}
               </ErrorBoundary>
@@ -2162,7 +2172,6 @@ function Dashboard() {
                         </div>
                       </div>
                       )}
-                      
                       </div>
                     </>
                 ) : selectedNodes.length > 1 ? (
@@ -2181,8 +2190,10 @@ function Dashboard() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-      </main>
+          </div>
+          )}
+
+        </main>
 
     {/* Chatbot Integration */}
       <Chatbot 

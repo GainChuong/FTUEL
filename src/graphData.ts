@@ -67,7 +67,9 @@ export interface GraphMetrics {
 }
 
 export function generateGraphData(data?: CrawledRow[]) {
-  const rawData = (data && data.length > 0) ? data : staticRawData;
+  // Only fallback to staticRawData if data is explicitly null or undefined.
+  // If data is an empty array [], it means the user has NO products.
+  const rawData = (data === undefined || data === null) ? staticRawData : data;
   const products: ProductNode[] = [];
   const shops: ShopNode[] = [];
   const regions: RegionNode[] = [];
@@ -119,7 +121,7 @@ export function generateGraphData(data?: CrawledRow[]) {
         id: shopId,
         type: 'shop',
         name: shopName,
-        isMe: i === 0, // first shop = "Me"
+        isMe: false, // Don't default to true for the first shop
         ratings: [],
         productCount: 0,
         totalRevenue: 0,

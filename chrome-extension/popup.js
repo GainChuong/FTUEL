@@ -16,6 +16,7 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
     if (confirm('Bạn có chắc chắn muốn xóa toàn bộ dữ liệu đã thu thập?')) {
         sendMessageToContent({ action: 'clear_data' });
         document.getElementById('countText').innerText = 'Số sản phẩm: 0';
+        document.getElementById('statusText').innerText = 'Trạng thái: Đã xóa dữ liệu';
     }
 });
 
@@ -31,14 +32,27 @@ function sendMessageToContent(message) {
     });
 }
 
-// Update count from storage (more reliable than message if page is reloading)
-function updateCount() {
-    chrome.storage.local.get(['products'], (result) => {
+// Update UI from storage (more reliable than message if page is reloading)
+function updateUI() {
+    chrome.storage.local.get(['products', 'isScrolling'], (result) => {
         const count = result.products ? result.products.length : 0;
         document.getElementById('countText').innerText = 'Số sản phẩm: ' + count;
+        
+        if (result.isScrolling) {
+            document.getElementById('statusText').innerText = 'Trạng thái: Đang tự cuộn...';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').style.opacity = '0.5';
+        } else {
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').style.opacity = '1';
+            if (document.getElementById('statusText').innerText === 'Trạng thái: Đang tự cuộn...') {
+                document.getElementById('statusText').innerText = 'Trạng thái: Đang chờ...';
+            }
+        }
     });
 }
 
-// Check if content script is active and update UI
-setInterval(updateCount, 1000);
-updateCount();
+// Check storage and update UI periodically
+setInterval(updateUI, 1000);
+updateUI();
+
