@@ -93,4 +93,4 @@ Nếu chẳng may khi bấm vào link không phải màn hình đăng nhập, b�
 - `/BrandGuidline`: Tài liệu và logo nhận diện thương hiệu.
 
 ---
-© 2026 GraphRetail AI Team - Architecting Retail Intelligence.
+© 2026 FTUEL Team - Architecting Retail Intelligence.
