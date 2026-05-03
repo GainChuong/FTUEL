@@ -12,6 +12,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 - **Gemini API Key** (Để chạy AI Chatbot phân tích)
 
 ### 2. Cài đặt Dashboard (Web App)
+### Cách 1: Tải và chạy Localhost trên máy tính cá nhân
 1. Clone repository về máy.
 2. Cài đặt các gói phụ thuộc:
    ```bash
@@ -31,7 +32,6 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 ### Cách 2: Truy cập nhanh (Khuyến nghị)
 Không cần cài đặt, bạn có thể truy cập trực tiếp vào web app đã được triển khai:
 👉 https://graph-retail-ai.vercel.app
-```
 
 
 ### 3. Tài khoản trải nghiệm & Đăng ký
