@@ -17,7 +17,7 @@ GraphRetail AI là một hệ thống phân tích đối thủ cạnh tranh toà
 2. Cài đặt các gói phụ thuộc:
    ```bash
    npm install
-````
+   ````
 3. Tạo file `.env` tại thư mục gốc với các thông số sau:
    ```env
    VITE_SUPABASE_URL=your_supabase_url
