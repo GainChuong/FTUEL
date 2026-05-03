@@ -82,7 +82,18 @@ export function generateGraphData(data?: CrawledRow[]) {
   // --- Pass 1: Create products and collect shop/region info ---
   rawData.forEach((row: any, i: number) => {
     const shopName = (row.shop || '').trim();
-    const regionName = (row.region || '').trim();
+    let regionName = (row.region || '').trim();
+
+    // Normalize popular regions to prevent duplicates (TP. HCM, Hà Nội, etc.)
+    const lowerRegion = regionName.toLowerCase();
+    if (lowerRegion.includes('hồ chí minh') || lowerRegion.includes('hcm')) {
+      regionName = 'TP. Hồ Chí Minh';
+    } else if (lowerRegion.includes('hà nội')) {
+      regionName = 'Hà Nội';
+    } else if (lowerRegion.includes('đà nẵng')) {
+      regionName = 'Đà Nẵng';
+    }
+
     if (!shopName || !regionName) return;
 
     const shopId = `shop-${shopName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;

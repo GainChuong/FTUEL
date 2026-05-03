@@ -50,6 +50,27 @@ export default function Chatbot({ selectedNode, simulationHistory, graphData, ma
   const x = useMotionValue(0);
   const y = useMotionValue(0);
 
+  // Calculate constraints based on viewport
+  const [constraints, setConstraints] = useState({ left: 0, right: 0, top: 0, bottom: 0 });
+
+  useEffect(() => {
+    const updateConstraints = () => {
+      // Chat window is 420x650. Margins are 24px (bottom-6, right-6)
+      // Initial position is bottom-right corner.
+      // Dragging left = negative x. Max left = window width - window width offset.
+      setConstraints({
+        left: -(window.innerWidth - 420 - 48), // 48 is total margin (24 left + 24 right)
+        right: 0,
+        top: -(window.innerHeight - 650 - 48),
+        bottom: 0,
+      });
+    };
+
+    updateConstraints();
+    window.addEventListener('resize', updateConstraints);
+    return () => window.removeEventListener('resize', updateConstraints);
+  }, []);
+
   // Initialize Gemini
   const ai = useMemo(() => {
     try {
@@ -339,6 +360,13 @@ Câu hỏi của người dùng: ${userQuery}
     <>
       <motion.button
         drag
+        dragConstraints={{
+          left: -(window.innerWidth - 64 - 48), // Button is approx 64x64
+          right: 0,
+          top: -(window.innerHeight - 64 - 48),
+          bottom: 0
+        }}
+        dragElastic={0}
         dragMomentum={false}
         whileDrag={{ scale: 1.1, cursor: 'grabbing' }}
         onDragStart={() => { isDraggingBtn.current = true; }}
@@ -354,6 +382,8 @@ Câu hỏi của người dùng: ${userQuery}
         {isOpen && (
           <motion.div
             drag
+            dragConstraints={constraints}
+            dragElastic={0}
             dragControls={dragControls}
             dragListener={false}
             dragMomentum={false}

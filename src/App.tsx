@@ -718,12 +718,82 @@ function Dashboard() {
   };
 
   const steps: Step[] = [
-    { target: '.graph-container', content: 'Đồ thị hiển thị mối quan hệ giữa Vùng, Shop và Sản phẩm. Node lớn = doanh thu cao.', disableBeacon: true },
-    { target: '.network-legend', content: 'Bảng chú giải: Vùng (đỏ), Shop của bạn (tím), Đối thủ (xanh), Sản phẩm (cam).' },
-    { target: '.add-product-btn', content: 'Thêm sản phẩm mới vào shop của bạn.' },
-    { target: '.compare-mode-toggle', content: 'Bật Compare Mode để chọn nhiều node và so sánh.' },
-    { target: '.intelligence-dashboard', content: 'Panel phân tích: xem chi tiết, điều chỉnh KM, dự báo doanh thu.' },
-    { target: '.chatbot-btn', content: 'Trợ lý AI - hỏi đáp về dữ liệu và chiến lược.' }
+    // --- PHẦN 1: TỔNG QUAN ---
+    {
+      target: '.graph-container',
+      content: '🗺️ Đây là Đồ thị Tri thức (Knowledge Graph) — trái tim của GraphRetail AI.\n\n• Mỗi node đại diện cho một Vùng, Shop hoặc Sản phẩm.\n• Kích thước node = Doanh thu (càng lớn = doanh thu càng cao).\n• Đường nối thể hiện mối quan hệ: bán hàng, vị trí, cạnh tranh.\n• Kéo thả node để khám phá cấu trúc thị trường.',
+      disableBeacon: true,
+      placement: 'center'
+    },
+    {
+      target: '.network-legend',
+      content: '📖 Bảng Chú Giải giúp bạn đọc đồ thị:\n\n• 🟢 Node xanh ngọc = Shop của bạn\n• ⚫ Node đen = Đối thủ cạnh tranh (Shop)\n• 🔵 Node xanh nhạt = Sản phẩm\n• 📍 Node xanh lá = Vùng/Khu vực\n• Đường liền = Kênh bán hàng (💰)\n• Đường đứt = Cạnh tranh trực tiếp\n\nNhấn "Căn giữa biểu đồ" để reset góc nhìn.'
+    },
+
+    // --- PHẦN 2: THANH CÔNG CỤ ---
+    {
+      target: '.search-container',
+      content: '🔍 Thanh Tìm kiếm — gõ tên sản phẩm hoặc shop để nhanh chóng di chuyển camera đến đúng node đó trên đồ thị.\n\nMẹo: Gõ một phần tên cũng được, hệ thống sẽ lọc tức thì!'
+    },
+    {
+      target: '.compare-mode-toggle',
+      content: '⚖️ Compare Mode — Bật chế độ so sánh để chọn nhiều node cùng lúc.\n\nKhi bật:\n• Click vào nhiều sản phẩm/shop khác nhau\n• Bảng so sánh sẽ hiển thị ở panel phải\n• So sánh giá, doanh thu, khuyến mại song song\n\nRất hữu ích khi phân tích đối thủ!'
+    },
+    {
+      target: '.sidebar-toggle-btn',
+      content: '📊 Nút Mở/Đóng Panel Phân tích bên phải.\n\nPanel này hiển thị thông tin chi tiết khi bạn click vào một node, bao gồm:\n• Thông tin giá, khuyến mại, đã bán\n• GNN Intelligence Score\n• Công cụ mô phỏng & dự báo doanh thu'
+    },
+    {
+      target: '.refresh-data-btn',
+      content: '🔄 Nút Làm mới Dữ liệu — tải lại toàn bộ dữ liệu mới nhất từ Supabase.\n\nSử dụng sau khi bạn vừa crawl thêm dữ liệu mới từ Chrome Extension để cập nhật đồ thị ngay lập tức mà không cần tải lại trang.'
+    },
+    {
+      target: '.add-product-btn',
+      content: '➕ Thêm Sản phẩm Mô phỏng — thêm một sản phẩm ảo vào đồ thị để dự báo hiệu quả trước khi ra mắt thật.\n\nBạn cần chọn "Shop của tôi" trước, sau đó nhập tên, giá và vùng cho sản phẩm mới.'
+    },
+    {
+      target: '.tutorial-btn',
+      content: '❓ Nút Hướng dẫn — nhấn vào đây bất cứ lúc nào để xem lại hướng dẫn sử dụng này từ đầu!'
+    },
+
+    // --- PHẦN 3: PANEL PHÂN TÍCH ---
+    {
+      target: '.intelligence-dashboard',
+      content: '🧠 Panel Intelligence — trung tâm điều khiển chiến lược:\n\n1️⃣ Market Scenarios: Chọn kinh tế Bình thường / Tăng trưởng / Suy thoái\n2️⃣ Khi click vào sản phẩm: xem GNN Score, đối thủ cạnh tranh, cảnh báo Cannibalization\n3️⃣ Điều chỉnh thanh trượt Giá/KM để chạy mô phỏng doanh thu\n4️⃣ Lưu kịch bản để so sánh sau'
+    },
+
+    // --- PHẦN 4: TƯƠNG TÁC ĐỒ THỊ ---
+    {
+      target: '.graph-container',
+      content: '🖱️ Cách tương tác với Đồ thị:\n\n• Click vào node → Xem chi tiết ở panel phải\n• Click vào Shop → Nhấn "Đặt làm Cửa hàng của tôi" để hệ thống phân tích chiến lược cho bạn\n• Cuộn chuột → Zoom in/out\n• Kéo nền → Di chuyển camera\n• Kéo node → Sắp xếp lại vị trí\n\nMẹo: Click vào nền trống để bỏ chọn tất cả.',
+      placement: 'center'
+    },
+
+    // --- PHẦN 5: AI CHATBOT ---
+    {
+      target: '.chatbot-btn',
+      content: '🤖 Trợ lý AI — chat trực tiếp với AI để phân tích dữ liệu:\n\n• Hỏi: "Top sản phẩm bán chạy nhất?"\n• Hỏi: "So sánh các shop"\n• Hỏi: "Đề xuất chiến lược giá"\n• Hỏi: "Sản phẩm nào cần tăng KM?"\n\nAI sẽ phân tích DỮ LIỆU THỰC TẾ từ đồ thị của bạn, không phải thông tin chung chung!'
+    },
+
+    // --- PHẦN 6: CHROME EXTENSION ---
+    {
+      target: '.graph-container',
+      content: '🧩 Chrome Extension — Thu thập dữ liệu từ Shopee:\n\n📥 Cài đặt:\n1. Mở chrome://extensions → Bật "Chế độ nhà phát triển"\n2. Nhấn "Tải tiện ích đã giải nén" → chọn thư mục chrome-extension/\n\n🔐 Đăng nhập:\n3. Mở Extension → nhập Email/Mật khẩu Supabase\n\n🕷️ Crawl dữ liệu:\n4. Vào trang Shopee → nhấn "Bắt đầu Crawl"\n5. Sau khi hoàn tất → nhấn "Đẩy lên Supabase"\n6. Quay lại Web App → nhấn nút 🔄 để xem dữ liệu mới!',
+      placement: 'center'
+    },
+
+    // --- PHẦN 7: MÔ PHỎNG NÂNG CAO ---
+    {
+      target: '.intelligence-dashboard',
+      content: '🎮 Mô phỏng Nâng cao:\n\n🌐 Chọn kịch bản kinh tế (Normal/Growth/Recession) để xem thị trường phản ứng thế nào.\n\n🎯 Auto Optimize: AI tự động tìm mức giá & KM tối ưu cho shop của bạn.\n\n💾 Lưu Kịch bản: Đặt tên và lưu lại để so sánh nhiều phương án khác nhau.\n\n🔄 Khôi phục gốc: Reset tất cả về trạng thái ban đầu.'
+    },
+
+    // --- KẾT THÚC ---
+    {
+      target: '.graph-container',
+      content: '🎉 Hoàn tất hướng dẫn!\n\nBạn đã nắm được tất cả chức năng chính của GraphRetail AI:\n\n✅ Đồ thị tri thức & GNN Intelligence\n✅ Tìm kiếm, so sánh, mô phỏng\n✅ Chrome Extension crawl dữ liệu\n✅ AI Chatbot phân tích chiến lược\n\nMẹo cuối: Nhấn nút ❓ trên thanh công cụ bất cứ lúc nào để xem lại hướng dẫn này.\n\nChúc bạn thành công! 🚀',
+      placement: 'center'
+    },
   ];
 
   const [initialData, setInitialData] = useState<any>(null);
@@ -1402,6 +1472,44 @@ function Dashboard() {
             zIndex: 10000,
             primaryColor: '#1de5e2',
           },
+          tooltip: {
+            borderRadius: '16px',
+            padding: '0',
+            maxWidth: '460px',
+          },
+          tooltipContainer: {
+            textAlign: 'left' as const,
+          },
+          tooltipContent: {
+            padding: '20px 24px',
+            fontSize: '14px',
+            lineHeight: '1.7',
+            whiteSpace: 'pre-line' as const,
+            color: '#334155',
+          },
+          tooltipTitle: {
+            fontSize: '16px',
+            fontWeight: 700,
+            padding: '16px 24px 0',
+          },
+          buttonNext: {
+            borderRadius: '10px',
+            padding: '8px 20px',
+            fontSize: '13px',
+            fontWeight: 700,
+          },
+          buttonBack: {
+            color: '#64748b',
+            fontSize: '13px',
+            fontWeight: 600,
+          },
+          buttonSkip: {
+            color: '#94a3b8',
+            fontSize: '12px',
+          },
+          spotlight: {
+            borderRadius: '16px',
+          },
         }}
         locale={{
           back: 'Quay lại',
@@ -1638,14 +1746,14 @@ function Dashboard() {
           <div className="w-px h-6 bg-slate-200 mx-1"></div>
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className={`p-2 rounded-lg transition-all border ${isSidebarOpen ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-[#30E9CD]/10 text-[#30E9CD] border-[#30E9CD]/20'}`}
+            className={`sidebar-toggle-btn p-2 rounded-lg transition-all border ${isSidebarOpen ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-[#30E9CD]/10 text-[#30E9CD] border-[#30E9CD]/20'}`}
             title={isSidebarOpen ? "Ẩn Panel" : "Hiện Panel"}
           >
             <Activity size={20} className={!isSidebarOpen ? 'animate-pulse' : ''} />
           </button>
           <button 
             onClick={() => setRefreshTrigger(prev => prev + 1)}
-            className="p-2 text-slate-400 hover:text-[#30E9CD] hover:bg-[#30E9CD]/10 rounded-lg transition-colors border border-transparent hover:border-[#30E9CD]/20"
+            className="refresh-data-btn p-2 text-slate-400 hover:text-[#30E9CD] hover:bg-[#30E9CD]/10 rounded-lg transition-colors border border-transparent hover:border-[#30E9CD]/20"
             title="Làm mới dữ liệu từ Supabase"
           >
             <RotateCcw size={20} className={dataLoading ? 'animate-spin' : ''} />
@@ -1663,7 +1771,7 @@ function Dashboard() {
               setTourKey(prev => prev + 1);
               setRunTour(true);
             }}
-            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+            className="tutorial-btn p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
             title="Start Interactive Tutorial"
           >
             <HelpCircle size={20} />
